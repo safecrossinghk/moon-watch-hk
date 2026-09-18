@@ -45,14 +45,14 @@
     </section>
 
     <section class="quick-grid">
-      <article class="info-card">
-        <span class="icon">🌙</span>
-        <div>
-          <span class="label">月相</span>
-          <strong>接近滿月</strong>
-          <small>98% 可見</small>
-        </div>
-      </article>
+<article class="info-card">
+<span class="icon">🌙</span>
+<div>
+<span class="label">月相</span>
+<strong id="moonPhase">載入中…</strong>
+<small id="moonPhasePercent">正在取得資料</small>
+</div>
+</article>
 
       <article class="info-card">
 <span class="icon">🌤️</span>
@@ -62,23 +62,23 @@
 <small id="weatherTemp">正在取得 Open-Meteo 資料</small>
 </div>
 </article>
-      <article class="info-card">
-        <span class="icon">🌅</span>
-        <div>
-          <span class="label">月出</span>
-          <strong>18:21</strong>
-          <small>示範時間</small>
-        </div>
-      </article>
+<article class="info-card">
+<span class="icon">🌅</span>
+<div>
+<span class="label">月出</span>
+<strong id="moonriseTime">--:--</strong>
+<small id="moonriseLabel">正在取得資料</small>
+</div>
+</article>
 
-      <article class="info-card">
-        <span class="icon">🌌</span>
-        <div>
-          <span class="label">月落</span>
-          <strong>06:03</strong>
-          <small>翌日 · 示範時間</small>
-        </div>
-      </article>
+<article class="info-card">
+<span class="icon">🌌</span>
+<div>
+<span class="label">月落</span>
+<strong id="moonsetTime">--:--</strong>
+<small id="moonsetLabel">正在取得資料</small>
+</div>
+</article>
     </section>
 
     <section class="weather-hours">
@@ -97,12 +97,12 @@
         <span class="live-dot">● LIVE</span>
       </div>
       <div id="countdown" class="countdown">00:18:42</div>
-      <p id="countdownText">示範倒數 · 日後接入真實月出資料</p>
-      <div class="arc">
-        <span class="arc-left">月出<br><b>18:21</b></span>
-        <span class="arc-moon">🌕</span>
-        <span class="arc-right">月落<br><b>06:03</b></span>
-      </div>
+      <p id="countdownText">正在取得真實月出資料…</p>
+<div class="arc">
+<span class="arc-left">月出<br><b id="moonriseArcTime">--:--</b></span>
+<span class="arc-moon">🌕</span>
+<span class="arc-right">月落<br><b id="moonsetArcTime">--:--</b></span>
+</div>
     </section>
 
     <section class="details">
