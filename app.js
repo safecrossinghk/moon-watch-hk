@@ -1,2440 +1,1406 @@
 // ==========================================================
-// 🌕 Moon Watch HK V0.5.1
+// 🌕 Moon Watch HK
+// V0.5 - Open-Meteo + 真實月亮位置 + 今晚賞月指數
 //
 // 功能：
 // 1. Open-Meteo 真實天氣
-// 2. Open-Meteo 真實月相
-// 3. Open-Meteo 真實月出 / 月落
-// 4. 天文計算：即時月亮方位
-// 5. 天文計算：即時月亮高度
-// 6. 今晚賞月指數 0–100
-// 7. 自動找出今晚較佳賞月時段
-// 8. GPS 使用者位置
-// 9. 月出倒數
-//
-// 本版本只需要更換 app.js
+// 2. Open-Meteo 月相 / 月出 / 月落
+// 3. 天文計算：月亮即時方位 / 高度
+// 4. 今晚賞月指數 0-100
+// 5. 直接更新原本 HTML 的卡片
+// 6. GPS 使用我的位置
 // ==========================================================
 
+(() => {
+"use strict";
 
-// ==========================================================
-// DOM
-// ==========================================================
-
-const countdownEl =
-    document.getElementById("countdown");
-
-const countdownTextEl =
-    document.getElementById("countdownText");
-
-const locationBtn =
-    document.getElementById("locationBtn");
-
-const toastEl =
-    document.getElementById("toast");
-
-const weatherSummaryEl =
-    document.getElementById("weatherSummary");
-
-const weatherTempEl =
-    document.getElementById("weatherTemp");
-
-const hourlyWeatherEl =
-    document.getElementById("hourlyWeather");
-
-const weatherUpdatedEl =
-    document.getElementById("weatherUpdated");
-
-
-// ==========================================================
-// 預設位置：香港
-// ==========================================================
+// ----------------------------------------------------------
+// 基本設定
+// ----------------------------------------------------------
 
 const DEFAULT_LOCATION = {
-    lat: 22.3193,
-    lon: 114.1694,
-    name: "香港"
+lat: 22.3193,
+lon: 114.1694,
+name: "香港"
 };
 
-let currentLocation = {
-    ...DEFAULT_LOCATION
-};
+let currentLocation = { ...DEFAULT_LOCATION };
+let currentWeatherData = null;
+let currentMoonData = null;
+let moonPositionTimer = null;
+let countdownTimer = null;
 
+// ----------------------------------------------------------
+// DOM
+// ----------------------------------------------------------
 
-// ==========================================================
+const scoreNumber = document.querySelector(".score-number");
+const scoreTitle = document.querySelector(".score-copy h2");
+const scoreDescription = document.querySelector(".score-copy p");
+
+const moonPhaseEl = document.getElementById("moonPhase");
+const moonPhasePercentEl = document.getElementById("moonPhasePercent");
+
+const weatherSummaryEl = document.getElementById("weatherSummary");
+const weatherTempEl = document.getElementById("weatherTemp");
+
+const moonriseTimeEl = document.getElementById("moonriseTime");
+const moonriseLabelEl = document.getElementById("moonriseLabel");
+
+const moonsetTimeEl = document.getElementById("moonsetTime");
+const moonsetLabelEl = document.getElementById("moonsetLabel");
+
+const weatherUpdatedEl = document.getElementById("weatherUpdated");
+const hourlyWeatherEl = document.getElementById("hourlyWeather");
+
+const countdownEl = document.getElementById("countdown");
+const countdownTextEl = document.getElementById("countdownText");
+
+const moonriseArcTimeEl = document.getElementById("moonriseArcTime");
+const moonsetArcTimeEl = document.getElementById("moonsetArcTime");
+
+const locationBtn = document.getElementById("locationBtn");
+const toastEl = document.getElementById("toast");
+
+const directionBigEl = document.querySelector(".direction-big");
+const directionMutedEl = document.querySelector(".direction .muted");
+const needleEl = document.querySelector(".needle");
+
+// ----------------------------------------------------------
 // 工具
-// ==========================================================
+// ----------------------------------------------------------
 
-function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
+function showToast(message) {
+if (!toastEl) return;
+
+toastEl.textContent = message;
+toastEl.classList.add("show");
+
+setTimeout(() => {
+toastEl.classList.remove("show");
+}, 2600);
 }
 
-
-function degToRad(deg) {
-    return deg * Math.PI / 180;
+function pad2(value) {
+return String(value).padStart(2, "0");
 }
 
+function formatTime(value) {
+if (!value) return "--:--";
 
-function radToDeg(rad) {
-    return rad * 180 / Math.PI;
+// Open-Meteo timezone=Asia/Hong_Kong
+// 回傳格式通常是：
+// 2026-09-21T14:10
+const match = String(value).match(/T(\d{2}):(\d{2})/);
+
+if (match) {
+return `${match[1]}:${match[2]}`;
 }
 
-
-function normalizeAngle(angle) {
-
-    angle %= 360;
-
-    if (angle < 0) {
-        angle += 360;
-    }
-
-    return angle;
+return "--:--";
 }
 
+function getHongKongDateParts(date = new Date()) {
+const formatter = new Intl.DateTimeFormat("en-CA", {
+timeZone: "Asia/Hong_Kong",
+year: "numeric",
+month: "2-digit",
+day: "2-digit",
+hour: "2-digit",
+minute: "2-digit",
+second: "2-digit",
+hourCycle: "h23"
+});
 
-// ==========================================================
-// 香港日期
-// ==========================================================
+const parts = formatter.formatToParts(date);
 
-function getHongKongDateString(date = new Date()) {
+const result = {};
 
-    return new Intl.DateTimeFormat("en-CA", {
-        timeZone: "Asia/Hong_Kong",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit"
-    }).format(date);
+parts.forEach(part => {
+if (part.type !== "literal") {
+result[part.type] = part.value;
+}
+});
+
+return {
+year: Number(result.year),
+month: Number(result.month),
+day: Number(result.day),
+hour: Number(result.hour),
+minute: Number(result.minute),
+second: Number(result.second)
+};
 }
 
+function getHKDateString(date = new Date()) {
+const p = getHongKongDateParts(date);
 
-// ==========================================================
-// 香港時間
-// ==========================================================
-
-function getHongKongHour(date = new Date()) {
-
-    const value =
-        new Intl.DateTimeFormat("en-US", {
-            timeZone: "Asia/Hong_Kong",
-            hour: "2-digit",
-            hour12: false
-        }).format(date);
-
-    return Number(value);
+return `${p.year}-${pad2(p.month)}-${pad2(p.day)}`;
 }
 
+function parseLocalDateTime(text) {
+if (!text) return null;
 
-// ==========================================================
-// 時間格式
-// ==========================================================
+const match = String(text).match(
+/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/
+);
 
-function formatLocalTime(dateString) {
+if (!match) return null;
 
-    if (!dateString) {
-        return "--";
-    }
+const year = Number(match[1]);
+const month = Number(match[2]);
+const day = Number(match[3]);
+const hour = Number(match[4]);
+const minute = Number(match[5]);
+const second = Number(match[6] || 0);
 
-    const match =
-        dateString.match(/T(\d{2}):(\d{2})/);
-
-    if (match) {
-        return `${match[1]}:${match[2]}`;
-    }
-
-    return "--";
+// 香港 UTC+8
+return Date.UTC(
+year,
+month - 1,
+day,
+hour - 8,
+minute,
+second
+);
 }
 
+function formatDuration(ms) {
+if (ms <= 0) return "00:00:00";
 
-// ==========================================================
-// 天氣文字
-// ==========================================================
+let totalSeconds = Math.floor(ms / 1000);
 
-function weatherText(code) {
+const hours = Math.floor(totalSeconds / 3600);
+totalSeconds %= 3600;
 
-    const map = {
+const minutes = Math.floor(totalSeconds / 60);
+const seconds = totalSeconds % 60;
 
-        0: "晴朗",
-        1: "大致晴朗",
-        2: "局部多雲",
-        3: "多雲",
-
-        45: "有霧",
-        48: "霧",
-
-        51: "毛毛雨",
-        53: "毛毛雨",
-        55: "毛毛雨",
-
-        61: "小雨",
-        63: "中雨",
-        65: "大雨",
-
-        66: "凍雨",
-        67: "凍雨",
-
-        71: "小雪",
-        73: "中雪",
-        75: "大雪",
-
-        80: "陣雨",
-        81: "陣雨",
-        82: "大陣雨",
-
-        95: "雷雨",
-        96: "雷雨",
-        99: "雷雨"
-    };
-
-    return map[code] || "天氣資料";
+return `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`;
 }
 
-
-// ==========================================================
+// ----------------------------------------------------------
 // 天氣圖示
-// ==========================================================
+// ----------------------------------------------------------
 
-function weatherIcon(code) {
+function weatherInfo(code) {
+const map = {
+0: { text: "晴朗", icon: "☀️" },
+1: { text: "大致晴朗", icon: "🌤️" },
+2: { text: "局部多雲", icon: "⛅" },
+3: { text: "多雲", icon: "☁️" },
+45: { text: "有霧", icon: "🌫️" },
+48: { text: "有霧", icon: "🌫️" },
+51: { text: "毛毛雨", icon: "🌦️" },
+53: { text: "毛毛雨", icon: "🌦️" },
+55: { text: "毛毛雨", icon: "🌦️" },
+56: { text: "凍毛毛雨", icon: "🌧️" },
+57: { text: "凍毛毛雨", icon: "🌧️" },
+61: { text: "有雨", icon: "🌧️" },
+63: { text: "有雨", icon: "🌧️" },
+65: { text: "大雨", icon: "🌧️" },
+66: { text: "凍雨", icon: "🌧️" },
+67: { text: "凍雨", icon: "🌧️" },
+71: { text: "有雪", icon: "🌨️" },
+73: { text: "有雪", icon: "🌨️" },
+75: { text: "大雪", icon: "❄️" },
+77: { text: "雪粒", icon: "🌨️" },
+80: { text: "驟雨", icon: "🌦️" },
+81: { text: "驟雨", icon: "🌧️" },
+82: { text: "大驟雨", icon: "⛈️" },
+85: { text: "陣雪", icon: "🌨️" },
+86: { text: "大陣雪", icon: "❄️" },
+95: { text: "雷雨", icon: "⛈️" },
+96: { text: "雷雨", icon: "⛈️" },
+99: { text: "雷雨", icon: "⛈️" }
+};
 
-    if (code === 0) return "☀️";
-
-    if (code === 1 || code === 2) {
-        return "🌤️";
-    }
-
-    if (code === 3) {
-        return "☁️";
-    }
-
-    if (code === 45 || code === 48) {
-        return "🌫️";
-    }
-
-    if (code >= 51 && code <= 67) {
-        return "🌧️";
-    }
-
-    if (code >= 71 && code <= 77) {
-        return "❄️";
-    }
-
-    if (code >= 80 && code <= 82) {
-        return "🌦️";
-    }
-
-    if (code >= 95) {
-        return "⛈️";
-    }
-
-    return "🌤️";
+return map[code] || {
+text: "天氣不明",
+icon: "🌥️"
+};
 }
 
-
-// ==========================================================
-// 🌕 月相
-// ==========================================================
+// ----------------------------------------------------------
+// 月相
+// ----------------------------------------------------------
 
 function getMoonPhaseInfo(phase) {
-
-    if (
-        phase == null ||
-        Number.isNaN(Number(phase))
-    ) {
-
-        return {
-            name: "月相資料",
-            illumination: null
-        };
-    }
-
-
-    const p =
-        Number(phase);
-
-
-    let name;
-
-
-    if (
-        p < 0.0625 ||
-        p >= 0.9375
-    ) {
-
-        name = "新月";
-
-    } else if (p < 0.1875) {
-
-        name = "眉月";
-
-    } else if (p < 0.3125) {
-
-        name = "上弦月";
-
-    } else if (p < 0.4375) {
-
-        name = "盈凸月";
-
-    } else if (p < 0.5625) {
-
-        name = "滿月";
-
-    } else if (p < 0.6875) {
-
-        name = "虧凸月";
-
-    } else if (p < 0.8125) {
-
-        name = "下弦月";
-
-    } else {
-
-        name = "殘月";
-    }
-
-
-    const illumination =
-        (
-            1 -
-            Math.cos(2 * Math.PI * p)
-        ) / 2 * 100;
-
-
-    return {
-        name,
-        illumination
-    };
+if (phase == null || Number.isNaN(Number(phase))) {
+return {
+name: "月相不明",
+emoji: "🌕",
+illumination: null
+};
 }
 
+const p = Number(phase);
 
-// ==========================================================
-// 🌕 Julian Date
-// ==========================================================
+let name;
+let emoji;
 
-function julianDate(date) {
-
-    return (
-        date.getTime() / 86400000
-    ) + 2440587.5;
+if (p < 0.03 || p >= 0.97) {
+name = "新月";
+emoji = "🌑";
+} else if (p < 0.22) {
+name = "娥眉月";
+emoji = "🌒";
+} else if (p < 0.28) {
+name = "上弦月";
+emoji = "🌓";
+} else if (p < 0.47) {
+name = "盈凸月";
+emoji = "🌔";
+} else if (p < 0.53) {
+name = "滿月";
+emoji = "🌕";
+} else if (p < 0.72) {
+name = "虧凸月";
+emoji = "🌖";
+} else if (p < 0.78) {
+name = "下弦月";
+emoji = "🌗";
+} else {
+name = "殘月";
+emoji = "🌘";
 }
 
-
-// ==========================================================
-// 🌕 月亮天文位置計算
-//
-// 回傳：
-// azimuth = 方位角
-// altitude = 高度角
-//
-// 方位：
-// 0°   北
-// 90°  東
-// 180° 南
-// 270° 西
-// ==========================================================
-
-function moonPosition(
-    date,
-    latitude,
-    longitude
-) {
-
-    const jd =
-        julianDate(date);
-
-    const d =
-        jd - 2451543.5;
-
-
-    // ------------------------------------------------------
-    // 月球軌道元素
-    // ------------------------------------------------------
-
-    const N =
-        normalizeAngle(
-            125.1228 -
-            0.0529538083 * d
-        );
-
-    const i =
-        5.1454;
-
-    const w =
-        318.0634 +
-        0.1643573223 * d;
-
-    const a =
-        60.2666;
-
-    const e =
-        0.054900;
-
-    const M =
-        normalizeAngle(
-            115.3654 +
-            13.0649929509 * d
-        );
-
-
-    // ------------------------------------------------------
-    // 偏近點角
-    // ------------------------------------------------------
-
-    const Mrad =
-        degToRad(M);
-
-    let E =
-        M +
-        radToDeg(
-            e *
-            Math.sin(Mrad) *
-            (
-                1 +
-                e *
-                Math.cos(Mrad)
-            )
-        );
-
-    E =
-        degToRad(E);
-
-
-    // ------------------------------------------------------
-    // 軌道平面
-    // ------------------------------------------------------
-
-    const xv =
-        a *
-        (
-            Math.cos(E) -
-            e
-        );
-
-    const yv =
-        a *
-        Math.sqrt(1 - e * e) *
-        Math.sin(E);
-
-
-    const v =
-        radToDeg(
-            Math.atan2(yv, xv)
-        );
-
-
-    const r =
-        Math.sqrt(
-            xv * xv +
-            yv * yv
-        );
-
-
-    // ------------------------------------------------------
-    // 黃道座標
-    // ------------------------------------------------------
-
-    const Nrad =
-        degToRad(N);
-
-    const irad =
-        degToRad(i);
-
-    const vrad =
-        degToRad(v + w);
-
-
-    const xh =
-        r *
-        (
-            Math.cos(Nrad) *
-            Math.cos(vrad)
-            -
-            Math.sin(Nrad) *
-            Math.sin(vrad) *
-            Math.cos(irad)
-        );
-
-
-    const yh =
-        r *
-        (
-            Math.sin(Nrad) *
-            Math.cos(vrad)
-            +
-            Math.cos(Nrad) *
-            Math.sin(vrad) *
-            Math.cos(irad)
-        );
-
-
-    const zh =
-        r *
-        Math.sin(vrad) *
-        Math.sin(irad);
-
-
-    const eclipticLongitude =
-        radToDeg(
-            Math.atan2(yh, xh)
-        );
-
-
-    const eclipticLatitude =
-        radToDeg(
-            Math.atan2(
-                zh,
-                Math.sqrt(
-                    xh * xh +
-                    yh * yh
-                )
-            )
-        );
-
-
-    // ------------------------------------------------------
-    // 黃赤交角
-    // ------------------------------------------------------
-
-    const ecl =
-        23.4393 -
-        3.563E-7 * d;
-
-    const eclRad =
-        degToRad(ecl);
-
-
-    const lonRad =
-        degToRad(
-            eclipticLongitude
-        );
-
-    const latRad =
-        degToRad(
-            eclipticLatitude
-        );
-
-
-    // ------------------------------------------------------
-    // 黃道座標 → 赤道座標
-    //
-    // 注意：
-    // 這裡的 latRad 是「月球黃道緯度」
-    // 不可以再用作觀測者緯度
-    // ------------------------------------------------------
-
-    const xe =
-        Math.cos(lonRad) *
-        Math.cos(latRad);
-
-
-    const ye =
-        Math.sin(lonRad) *
-        Math.cos(latRad) *
-        Math.cos(eclRad)
-        -
-        Math.sin(latRad) *
-        Math.sin(eclRad);
-
-
-    const ze =
-        Math.sin(lonRad) *
-        Math.cos(latRad) *
-        Math.sin(eclRad)
-        +
-        Math.sin(latRad) *
-        Math.cos(eclRad);
-
-
-    const ra =
-        radToDeg(
-            Math.atan2(ye, xe)
-        );
-
-
-    const dec =
-        radToDeg(
-            Math.atan2(
-                ze,
-                Math.sqrt(
-                    xe * xe +
-                    ye * ye
-                )
-            )
-        );
-
-
-    // ------------------------------------------------------
-    // 本地恆星時
-    // ------------------------------------------------------
-
-    const GMST =
-        normalizeAngle(
-            280.46061837
-            +
-            360.98564736629 *
-            (jd - 2451545.0)
-            +
-            0.000387933 *
-            Math.pow(
-                (jd - 2451545.0) / 36525,
-                2
-            )
-        );
-
-
-    const LST =
-        normalizeAngle(
-            GMST + longitude
-        );
-
-
-    const hourAngle =
-        normalizeAngle(
-            LST - ra
-        );
-
-
-    const H =
-        degToRad(
-            hourAngle > 180
-                ? hourAngle - 360
-                : hourAngle
-        );
-
-
-    // ------------------------------------------------------
-    // 觀測者緯度
-    //
-    // 重要：
-    // 改名為 observerLatRad
-    // 避免與上面的月球 latRad 重複
-    // ------------------------------------------------------
-
-    const observerLatRad =
-        degToRad(latitude);
-
-    const decRad =
-        degToRad(dec);
-
-
-    // ------------------------------------------------------
-    // 赤道座標 → 高度角
-    // ------------------------------------------------------
-
-    let altitude =
-        Math.asin(
-            Math.sin(observerLatRad) *
-            Math.sin(decRad)
-            +
-            Math.cos(observerLatRad) *
-            Math.cos(decRad) *
-            Math.cos(H)
-        );
-
-
-    altitude =
-        radToDeg(altitude);
-
-
-    // ------------------------------------------------------
-    // 方位角
-    // ------------------------------------------------------
-
-    let azimuth =
-        Math.atan2(
-            Math.sin(H),
-            Math.cos(H) *
-            Math.sin(observerLatRad)
-            -
-            Math.tan(decRad) *
-            Math.cos(observerLatRad)
-        );
-
-
-    azimuth =
-        normalizeAngle(
-            radToDeg(azimuth) + 180
-        );
-
-
-    // ------------------------------------------------------
-    // 大氣折射
-    // ------------------------------------------------------
-
-    let apparentAltitude =
-        altitude;
-
-
-    if (
-        altitude > -1 &&
-        altitude < 90
-    ) {
-
-        const refraction =
-            1.02 /
-            Math.tan(
-                degToRad(
-                    altitude +
-                    10.3 /
-                    (altitude + 5.11)
-                )
-            ) /
-            60;
-
-
-        apparentAltitude =
-            altitude + refraction;
-    }
-
-
-    return {
-
-        azimuth:
-            normalizeAngle(azimuth),
-
-        altitude:
-            apparentAltitude
-    };
+// 根據月相週期估算照明比例
+const illumination =
+Math.round(
+((1 - Math.cos(2 * Math.PI * p)) / 2) * 100
+);
+
+return {
+name,
+emoji,
+illumination
+};
 }
 
+// ----------------------------------------------------------
+// Open-Meteo
+// ----------------------------------------------------------
 
-// ==========================================================
-// 🧭 方位文字
-// ==========================================================
+async function loadWeather(location) {
+const url =
+"https://api.open-meteo.com/v1/forecast" +
+`?latitude=${encodeURIComponent(location.lat)}` +
+`&longitude=${encodeURIComponent(location.lon)}` +
+"&hourly=temperature_2m,precipitation_probability,cloud_cover,visibility,weather_code" +
+"&daily=moonrise,moonset,moon_phase" +
+"&forecast_days=2" +
+"&timezone=Asia%2FHong_Kong";
 
-function getDirectionName(
-    azimuth
-) {
-
-    const directions = [
-
-        "北",
-        "北北東",
-        "東北",
-        "東北偏東",
-        "東",
-        "東南偏東",
-        "東南",
-        "南東偏南",
-        "南",
-        "西南偏南",
-        "西南",
-        "西南偏西",
-        "西",
-        "西北偏西",
-        "西北",
-        "北西偏北"
-    ];
-
-
-    const index =
-        Math.round(
-            azimuth / 22.5
-        ) % 16;
-
-
-    return directions[index];
+try {
+if (weatherUpdatedEl) {
+weatherUpdatedEl.textContent = "更新中";
 }
 
-
-// ==========================================================
-// 🌕 即時月亮位置
-// ==========================================================
-
-function renderMoonPosition() {
-
-    const now =
-        new Date();
-
-
-    const position =
-        moonPosition(
-            now,
-            currentLocation.lat,
-            currentLocation.lon
-        );
-
-
-    const azimuth =
-        Math.round(
-            position.azimuth
-        );
-
-
-    const altitude =
-        Math.round(
-            position.altitude
-        );
-
-
-    const direction =
-        getDirectionName(
-            position.azimuth
-        );
-
-
-    const altitudeText =
-        altitude > 0
-            ? "離地平線"
-            : "目前在地平線以下";
-
-
-    // ------------------------------------------------------
-    // 如果 HTML 本身有 moonAzimuth
-    // ------------------------------------------------------
-
-    const azEl =
-        document.getElementById(
-            "moonAzimuth"
-        );
-
-
-    if (azEl) {
-
-        azEl.textContent =
-            `${azimuth}°`;
-    }
-
-
-    // ------------------------------------------------------
-    // 如果 HTML 本身有 moonAltitude
-    // ------------------------------------------------------
-
-    const altEl =
-        document.getElementById(
-            "moonAltitude"
-        );
-
-
-    if (altEl) {
-
-        altEl.textContent =
-            `${altitude}°`;
-    }
-
-
-    // ------------------------------------------------------
-    // 舊月亮位置文字
-    // ------------------------------------------------------
-
-    const moonDirectionEl =
-        document.getElementById(
-            "moonDirection"
-        );
-
-
-    if (moonDirectionEl) {
-
-        moonDirectionEl.textContent =
-            `${direction} ${azimuth}°`;
-    }
-
-
-    const moonDemoEl =
-        document.getElementById(
-            "moonDemo"
-        );
-
-
-    if (moonDemoEl) {
-
-        moonDemoEl.textContent =
-            `月亮高度約 ${altitude}°・天文計算`;
-    }
-
-
-    // ------------------------------------------------------
-    // 建立 / 更新即時月亮位置卡
-    // ------------------------------------------------------
-
-    let liveCard =
-        document.getElementById(
-            "liveMoonPosition"
-        );
-
-
-    if (!liveCard) {
-
-        liveCard =
-            document.createElement("div");
-
-
-        liveCard.id =
-            "liveMoonPosition";
-
-
-        liveCard.style.marginTop =
-            "18px";
-
-
-        liveCard.style.padding =
-            "22px";
-
-
-        liveCard.style.borderRadius =
-            "24px";
-
-
-        liveCard.style.background =
-            "rgba(255,255,255,0.06)";
-
-
-        liveCard.style.border =
-            "1px solid rgba(255,255,255,0.18)";
-
-
-        const parent =
-            document.querySelector(
-                ".details, .moon-details, main"
-            );
-
-
-        if (parent) {
-
-            parent.appendChild(
-                liveCard
-            );
-
-        } else {
-
-            document.body.appendChild(
-                liveCard
-            );
-        }
-    }
-
-
-    const timeText =
-        new Intl.DateTimeFormat(
-            "zh-HK",
-            {
-                timeZone: "Asia/Hong_Kong",
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false
-            }
-        ).format(now);
-
-
-    liveCard.innerHTML = `
-
-        <div style="
-            font-size:18px;
-            font-weight:700;
-            margin-bottom:16px;
-        ">
-            🌕 即時月亮位置
-        </div>
-
-        <div style="
-            display:flex;
-            gap:42px;
-            margin-bottom:10px;
-        ">
-
-            <div>
-
-                <div style="
-                    font-size:15px;
-                    opacity:.7;
-                ">
-                    方位
-                </div>
-
-                <div style="
-                    font-size:38px;
-                    font-weight:700;
-                    line-height:1.1;
-                ">
-                    ${azimuth}°
-                </div>
-
-                <div style="
-                    font-size:17px;
-                ">
-                    ${direction}
-                </div>
-
-            </div>
-
-
-            <div>
-
-                <div style="
-                    font-size:15px;
-                    opacity:.7;
-                ">
-                    高度
-                </div>
-
-                <div style="
-                    font-size:38px;
-                    font-weight:700;
-                    line-height:1.1;
-                ">
-                    ${altitude}°
-                </div>
-
-                <div style="
-                    font-size:17px;
-                ">
-                    ${altitudeText}
-                </div>
-
-            </div>
-
-        </div>
-
-
-        <div style="
-            margin-top:18px;
-            font-size:14px;
-            opacity:.65;
-        ">
-            天文計算 · ${timeText}
-        </div>
-    `;
+const response = await fetch(url, {
+cache: "no-store"
+});
+
+if (!response.ok) {
+throw new Error(`Open-Meteo HTTP ${response.status}`);
 }
 
+const data = await response.json();
 
-// ==========================================================
-// 🌕 月相 / 月出 / 月落
-// ==========================================================
+currentWeatherData = data;
+
+renderCurrentWeather(data);
+renderMoonData(data);
+renderHourlyWeather(data);
+
+// 天氣完成後計算今晚賞月指數
+calculateTonightScore(data);
+
+// 啟動月出倒數
+startMoonriseCountdown();
+
+// 即時月亮位置
+updateMoonPosition();
+
+if (moonPositionTimer) {
+clearInterval(moonPositionTimer);
+}
+
+moonPositionTimer = setInterval(() => {
+updateMoonPosition();
+}, 30000);
+
+} catch (error) {
+console.error("Open-Meteo error:", error);
+
+if (weatherUpdatedEl) {
+weatherUpdatedEl.textContent = "資料讀取失敗";
+}
+
+if (weatherSummaryEl) {
+weatherSummaryEl.textContent = "暫時無法取得";
+}
+
+if (weatherTempEl) {
+weatherTempEl.textContent = "請稍後重新整理";
+}
+
+showToast("暫時無法取得 Open-Meteo 天氣資料");
+}
+}
+
+// ----------------------------------------------------------
+// 目前天氣
+// ----------------------------------------------------------
+
+function renderCurrentWeather(data) {
+if (!data || !data.hourly) return;
+
+const now = Date.now();
+
+let closestIndex = 0;
+let closestDiff = Infinity;
+
+data.hourly.time.forEach((time, index) => {
+const t = parseLocalDateTime(time);
+if (t == null) return;
+
+const diff = Math.abs(t - now);
+
+if (diff < closestDiff) {
+closestDiff = diff;
+closestIndex = index;
+}
+});
+
+const temp = data.hourly.temperature_2m?.[closestIndex];
+const code = data.hourly.weather_code?.[closestIndex];
+const cloud = data.hourly.cloud_cover?.[closestIndex];
+
+const info = weatherInfo(code);
+
+if (weatherSummaryEl) {
+weatherSummaryEl.textContent =
+`${info.icon} ${info.text}`;
+}
+
+if (weatherTempEl) {
+const tempText =
+temp != null
+? `${Math.round(temp)}°C`
+: "--°C";
+
+const cloudText =
+cloud != null
+? `雲量 ${Math.round(cloud)}%`
+: "";
+
+weatherTempEl.textContent =
+`${tempText}${cloudText ? " · " + cloudText : ""}`;
+}
+
+if (weatherUpdatedEl) {
+const p = getHongKongDateParts();
+
+weatherUpdatedEl.textContent =
+`LIVE ${pad2(p.hour)}:${pad2(p.minute)}`;
+}
+}
+
+// ----------------------------------------------------------
+// 月相 / 月出 / 月落
+// ----------------------------------------------------------
 
 function renderMoonData(data) {
+if (!data || !data.daily) return;
 
-    if (
-        !data ||
-        !data.daily ||
-        !data.daily.time ||
-        !data.daily.time.length
-    ) {
-        return;
-    }
+const today = getHKDateString();
 
+let index = data.daily.time.indexOf(today);
 
-    const phaseEl =
-        document.getElementById(
-            "moonPhase"
-        );
-
-
-    const phasePercentEl =
-        document.getElementById(
-            "moonPhasePercent"
-        );
-
-
-    const moonriseEl =
-        document.getElementById(
-            "moonriseTime"
-        );
-
-
-    const moonriseLabelEl =
-        document.getElementById(
-            "moonriseLabel"
-        );
-
-
-    const moonsetEl =
-        document.getElementById(
-            "moonsetTime"
-        );
-
-
-    const moonsetLabelEl =
-        document.getElementById(
-            "moonsetLabel"
-        );
-
-
-    const moonriseArcEl =
-        document.getElementById(
-            "moonriseArcTime"
-        );
-
-
-    const moonsetArcEl =
-        document.getElementById(
-            "moonsetArcTime"
-        );
-
-
-    const today =
-        getHongKongDateString();
-
-
-    let index =
-        data.daily.time.indexOf(
-            today
-        );
-
-
-    if (index < 0) {
-        index = 0;
-    }
-
-
-    const phase =
-        data.daily.moon_phase
-            ? data.daily.moon_phase[index]
-            : null;
-
-
-    const moonInfo =
-        getMoonPhaseInfo(
-            phase
-        );
-
-
-    const moonrise =
-        data.daily.moonrise
-            ? data.daily.moonrise[index]
-            : null;
-
-
-    const moonset =
-        data.daily.moonset
-            ? data.daily.moonset[index]
-            : null;
-
-
-    if (phaseEl) {
-
-        phaseEl.textContent =
-            moonInfo.name;
-    }
-
-
-    if (
-        phasePercentEl &&
-        moonInfo.illumination != null
-    ) {
-
-        phasePercentEl.textContent =
-            `約 ${Math.round(
-                moonInfo.illumination
-            )}% 可見`;
-    }
-
-
-    if (moonriseEl) {
-
-        moonriseEl.textContent =
-            formatLocalTime(
-                moonrise
-            );
-    }
-
-
-    if (moonriseLabelEl) {
-
-        moonriseLabelEl.textContent =
-            "香港本地時間";
-    }
-
-
-    if (moonsetEl) {
-
-        moonsetEl.textContent =
-            formatLocalTime(
-                moonset
-            );
-    }
-
-
-    if (moonsetLabelEl) {
-
-        moonsetLabelEl.textContent =
-            "香港本地時間";
-    }
-
-
-    if (moonriseArcEl) {
-
-        moonriseArcEl.textContent =
-            formatLocalTime(
-                moonrise
-            );
-    }
-
-
-    if (moonsetArcEl) {
-
-        moonsetArcEl.textContent =
-            formatLocalTime(
-                moonset
-            );
-    }
-
-
-    startMoonriseCountdown(
-        moonrise
-    );
+if (index < 0) {
+index = 0;
 }
 
+const moonrise = data.daily.moonrise?.[index];
+const moonset = data.daily.moonset?.[index];
+const phase = data.daily.moon_phase?.[index];
 
-// ==========================================================
-// ⏱ 月出倒數
-// ==========================================================
+currentMoonData = {
+moonrise,
+moonset,
+phase
+};
 
-function startMoonriseCountdown(
-    moonriseString
-) {
+const phaseInfo = getMoonPhaseInfo(phase);
 
-    if (!moonriseString) {
-        return;
-    }
-
-
-    function update() {
-
-        const match =
-            moonriseString.match(
-                /T(\d{2}):(\d{2})/
-            );
-
-
-        if (!match) {
-            return;
-        }
-
-
-        const riseHour =
-            Number(match[1]);
-
-
-        const riseMinute =
-            Number(match[2]);
-
-
-        const parts =
-            new Intl.DateTimeFormat(
-                "en-US",
-                {
-                    timeZone: "Asia/Hong_Kong",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    second: "2-digit",
-                    hour12: false
-                }
-            ).formatToParts(
-                new Date()
-            );
-
-
-        function getPart(type) {
-
-            const item =
-                parts.find(
-                    p => p.type === type
-                );
-
-            return item
-                ? Number(item.value)
-                : 0;
-        }
-
-
-        const currentSeconds =
-            getPart("hour") * 3600
-            +
-            getPart("minute") * 60
-            +
-            getPart("second");
-
-
-        const riseSeconds =
-            riseHour * 3600
-            +
-            riseMinute * 60;
-
-
-        let diff =
-            riseSeconds -
-            currentSeconds;
-
-
-        if (diff <= 0) {
-
-            if (countdownEl) {
-
-                countdownEl.textContent =
-                    "🌕";
-            }
-
-
-            if (countdownTextEl) {
-
-                countdownTextEl.textContent =
-                    "月亮已經升起";
-            }
-
-
-            return;
-        }
-
-
-        const hours =
-            Math.floor(
-                diff / 3600
-            );
-
-
-        diff %= 3600;
-
-
-        const minutes =
-            Math.floor(
-                diff / 60
-            );
-
-
-        const seconds =
-            diff % 60;
-
-
-        if (countdownEl) {
-
-            countdownEl.textContent =
-                `${String(hours).padStart(2, "0")}:` +
-                `${String(minutes).padStart(2, "0")}:` +
-                `${String(seconds).padStart(2, "0")}`;
-        }
-
-
-        if (countdownTextEl) {
-
-            countdownTextEl.textContent =
-                "距離月出";
-        }
-    }
-
-
-    update();
-
-
-    clearInterval(
-        window.moonCountdownTimer
-    );
-
-
-    window.moonCountdownTimer =
-        setInterval(
-            update,
-            1000
-        );
+if (moonPhaseEl) {
+moonPhaseEl.textContent =
+`${phaseInfo.emoji} ${phaseInfo.name}`;
 }
 
+if (moonPhasePercentEl) {
+if (phaseInfo.illumination != null) {
+moonPhasePercentEl.textContent =
+`約 ${phaseInfo.illumination}% 可見`;
+} else {
+moonPhasePercentEl.textContent =
+"正在取得資料";
+}
+}
 
-// ==========================================================
-// 🌦 今晚 18:00–23:00
-// ==========================================================
+if (moonriseTimeEl) {
+moonriseTimeEl.textContent =
+formatTime(moonrise);
+}
+
+if (moonriseLabelEl) {
+moonriseLabelEl.textContent =
+"香港本地時間";
+}
+
+if (moonsetTimeEl) {
+moonsetTimeEl.textContent =
+formatTime(moonset);
+}
+
+if (moonsetLabelEl) {
+moonsetLabelEl.textContent =
+"香港本地時間";
+}
+
+if (moonriseArcTimeEl) {
+moonriseArcTimeEl.textContent =
+formatTime(moonrise);
+}
+
+if (moonsetArcTimeEl) {
+moonsetArcTimeEl.textContent =
+formatTime(moonset);
+}
+}
+
+// ----------------------------------------------------------
+// 今晚逐小時天氣
+// ----------------------------------------------------------
 
 function getTonightRows(data) {
+if (!data || !data.hourly) return [];
 
-    if (
-        !data ||
-        !data.hourly ||
-        !data.hourly.time
-    ) {
+const today = getHongKongDateParts();
 
-        return [];
-    }
+const todayString =
+`${today.year}-${pad2(today.month)}-${pad2(today.day)}`;
 
+const rows = [];
 
-    const today =
-        getHongKongDateString();
+for (let i = 0; i < data.hourly.time.length; i++) {
+const time = data.hourly.time[i];
 
-
-    const rows = [];
-
-
-    for (
-        let i = 0;
-        i < data.hourly.time.length;
-        i++
-    ) {
-
-        const time =
-            data.hourly.time[i];
-
-
-        if (
-            !time.startsWith(today)
-        ) {
-
-            continue;
-        }
-
-
-        const hour =
-            Number(
-                time.slice(11, 13)
-            );
-
-
-        if (
-            hour >= 18 &&
-            hour <= 23
-        ) {
-
-            rows.push({
-
-                index: i,
-
-                time,
-
-                hour,
-
-                temperature:
-                    data.hourly.temperature_2m[i],
-
-                precipitationProbability:
-                    data.hourly
-                        .precipitation_probability[i],
-
-                cloudCover:
-                    data.hourly.cloud_cover[i],
-
-                visibility:
-                    data.hourly.visibility[i],
-
-                weatherCode:
-                    data.hourly.weather_code[i]
-            });
-        }
-    }
-
-
-    return rows;
+if (!time.startsWith(todayString)) {
+continue;
 }
 
+const match = time.match(/T(\d{2}):(\d{2})/);
 
-// ==========================================================
-// 🌦 顯示今晚逐小時天氣
-// ==========================================================
+if (!match) continue;
 
-function renderHourlyWeather(
-    rows
-) {
+const hour = Number(match[1]);
 
-    if (!hourlyWeatherEl) {
-        return;
-    }
-
-
-    hourlyWeatherEl.innerHTML =
-        "";
-
-
-    rows.forEach(row => {
-
-        const div =
-            document.createElement(
-                "div"
-            );
-
-
-        div.className =
-            "hour-row";
-
-
-        div.innerHTML = `
-
-            <div class="hour-time">
-                ${String(row.hour).padStart(2, "0")}:00
-            </div>
-
-            <div class="hour-icon">
-                ${weatherIcon(row.weatherCode)}
-            </div>
-
-            <div class="hour-temp">
-                ${Math.round(row.temperature)}°
-            </div>
-
-            <div class="hour-weather">
-                ${weatherText(row.weatherCode)}
-            </div>
-
-            <div class="hour-cloud">
-                ☁️ ${Math.round(row.cloudCover)}%
-            </div>
-
-            <div class="hour-rain">
-                🌧 ${Math.round(row.precipitationProbability)}%
-            </div>
-
-        `;
-
-
-        hourlyWeatherEl.appendChild(
-            div
-        );
-    });
+// 今晚 18:00 - 23:00
+if (hour < 18 || hour > 23) {
+continue;
 }
 
-
-// ==========================================================
-// 🌕 指定時間的月亮位置
-// ==========================================================
-
-function getMoonPositionForTime(
-    timeString
-) {
-
-    const parts =
-        timeString.match(
-            /(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/
-        );
-
-
-    if (!parts) {
-        return null;
-    }
-
-
-    const year =
-        Number(parts[1]);
-
-    const month =
-        Number(parts[2]);
-
-    const day =
-        Number(parts[3]);
-
-    const hour =
-        Number(parts[4]);
-
-    const minute =
-        Number(parts[5]);
-
-
-    // 香港 = UTC+8
-    const utcDate =
-        new Date(
-            Date.UTC(
-                year,
-                month - 1,
-                day,
-                hour - 8,
-                minute
-            )
-        );
-
-
-    return moonPosition(
-        utcDate,
-        currentLocation.lat,
-        currentLocation.lon
-    );
+rows.push({
+time,
+hour,
+temperature: data.hourly.temperature_2m?.[i],
+rainProbability:
+data.hourly.precipitation_probability?.[i],
+cloud:
+data.hourly.cloud_cover?.[i],
+visibility:
+data.hourly.visibility?.[i],
+weatherCode:
+data.hourly.weather_code?.[i]
+});
 }
 
+return rows;
+}
+
+function renderHourlyWeather(data) {
+if (!hourlyWeatherEl) return;
+
+const rows = getTonightRows(data);
+
+if (!rows.length) {
+hourlyWeatherEl.innerHTML =
+`<div class="weather-loading">暫時沒有今晚逐小時資料</div>`;
+return;
+}
+
+hourlyWeatherEl.innerHTML = rows.map(row => {
+const info = weatherInfo(row.weatherCode);
+
+const temp =
+row.temperature != null
+? `${Math.round(row.temperature)}°`
+: "--";
+
+const cloud =
+row.cloud != null
+? `雲 ${Math.round(row.cloud)}%`
+: "雲 --";
+
+const rain =
+row.rainProbability != null
+? `雨 ${Math.round(row.rainProbability)}%`
+: "雨 --";
+
+return `
+<div class="hour-row">
+<div class="hour-time">
+${pad2(row.hour)}:00
+</div>
+
+<div class="hour-icon">
+${info.icon}
+</div>
+
+<div class="hour-temp">
+${temp}
+</div>
+
+<div class="hour-detail">
+${info.text}<br>
+${cloud} · ${rain}
+</div>
+
+<div class="hour-live">
+LIVE
+</div>
+</div>
+`;
+}).join("");
+}
 
 // ==========================================================
-// ⭐ 每小時賞月分數
+// 🌕 月亮天文計算
+// ==========================================================
+
+function degToRad(deg) {
+return deg * Math.PI / 180;
+}
+
+function radToDeg(rad) {
+return rad * 180 / Math.PI;
+}
+
+function normalizeDegrees(value) {
+let result = value % 360;
+
+if (result < 0) {
+result += 360;
+}
+
+return result;
+}
+
+function normalizeRadians(value) {
+const twoPi = Math.PI * 2;
+
+let result = value % twoPi;
+
+if (result < 0) {
+result += twoPi;
+}
+
+return result;
+}
+
+// ----------------------------------------------------------
+// Julian Date
+// ----------------------------------------------------------
+
+function julianDate(date) {
+return date.getTime() / 86400000 + 2440587.5;
+}
+
+// ----------------------------------------------------------
+// 低誤差月球軌道計算
 //
-// 雲量       35%
-// 降雨機率   25%
-// 能見度     15%
-// 月亮高度   25%
-// ==========================================================
-
-function calculateHourlyMoonScore(
-    row
-) {
-
-    // ------------------------------------------------------
-    // ☁️ 雲量
-    // ------------------------------------------------------
-
-    const cloudScore =
-        clamp(
-            100 -
-            Number(row.cloudCover),
-            0,
-            100
-        );
-
-
-    // ------------------------------------------------------
-    // 🌧 降雨
-    // ------------------------------------------------------
-
-    const rainScore =
-        clamp(
-            100 -
-            Number(
-                row.precipitationProbability
-            ),
-            0,
-            100
-        );
-
-
-    // ------------------------------------------------------
-    // 👁 能見度
-    // ------------------------------------------------------
-
-    const visibilityKm =
-        Number(row.visibility) / 1000;
-
-
-    let visibilityScore;
-
-
-    if (visibilityKm >= 10) {
-
-        visibilityScore = 100;
-
-    } else if (visibilityKm >= 5) {
-
-        visibilityScore =
-            70 +
-            (
-                visibilityKm - 5
-            ) * 6;
-
-    } else if (visibilityKm >= 2) {
-
-        visibilityScore =
-            40 +
-            (
-                visibilityKm - 2
-            ) * 10;
-
-    } else {
-
-        visibilityScore =
-            10 +
-            visibilityKm * 15;
-    }
-
-
-    visibilityScore =
-        clamp(
-            visibilityScore,
-            0,
-            100
-        );
-
-
-    // ------------------------------------------------------
-    // 🌕 月亮高度
-    // ------------------------------------------------------
-
-    const moon =
-        getMoonPositionForTime(
-            row.time
-        );
-
-
-    let altitudeScore = 0;
-
-
-    if (moon) {
-
-        const altitude =
-            moon.altitude;
-
-
-        if (altitude <= 0) {
-
-            altitudeScore = 0;
-
-        } else if (altitude < 5) {
-
-            altitudeScore = 25;
-
-        } else if (altitude < 15) {
-
-            altitudeScore = 55;
-
-        } else if (altitude < 30) {
-
-            altitudeScore = 80;
-
-        } else if (altitude < 50) {
-
-            altitudeScore = 100;
-
-        } else if (altitude < 70) {
-
-            altitudeScore = 90;
-
-        } else {
-
-            altitudeScore = 75;
-        }
-    }
-
-
-    // ------------------------------------------------------
-    // ⭐ 最終分數
-    // ------------------------------------------------------
-
-    let score =
-        cloudScore * 0.35
-        +
-        rainScore * 0.25
-        +
-        visibilityScore * 0.15
-        +
-        altitudeScore * 0.25;
-
-
-    // 月亮在地平線以下
-    if (
-        moon &&
-        moon.altitude <= 0
-    ) {
-
-        score *= 0.35;
-    }
-
-
-    return Math.round(
-        clamp(
-            score,
-            0,
-            100
-        )
-    );
-}
-
-
-// ==========================================================
-// ⭐ 今晚賞月指數
-// ==========================================================
-
-function calculateTonightMoonScore(
-    rows
-) {
-
-    if (
-        !rows ||
-        rows.length === 0
-    ) {
-
-        return {
-
-            score: 0,
-
-            bestRow: null,
-
-            bestScore: 0,
-
-            averageScore: 0,
-
-            scores: []
-        };
-    }
-
-
-    const scores =
-        rows.map(row => {
-
-            return {
-
-                row,
-
-                score:
-                    calculateHourlyMoonScore(
-                        row
-                    )
-            };
-        });
-
-
-    const best =
-        scores.reduce(
-            (bestItem, currentItem) => {
-
-                return currentItem.score >
-                    bestItem.score
-
-                    ? currentItem
-
-                    : bestItem;
-            }
-        );
-
-
-    const average =
-        scores.reduce(
-            (sum, item) => {
-
-                return sum +
-                    item.score;
-
-            },
-            0
-        ) / scores.length;
-
-
-    // 最佳時段 60%
-    // 今晚平均 40%
-
-    const finalScore =
-        Math.round(
-            best.score * 0.6
-            +
-            average * 0.4
-        );
-
-
-    return {
-
-        score:
-            clamp(
-                finalScore,
-                0,
-                100
-            ),
-
-        bestRow:
-            best.row,
-
-        bestScore:
-            best.score,
-
-        averageScore:
-            Math.round(
-                average
-            ),
-
-        scores
-    };
-}
-
-
-// ==========================================================
-// ⭐ 賞月指數文字
-// ==========================================================
-
-function getMoonScoreText(
-    score
-) {
-
-    if (score >= 85) {
-
-        return {
-
-            label:
-                "非常適合賞月",
-
-            icon:
-                "🌕",
-
-            description:
-                "今晚天空條件相當不錯，適合外出抬頭看看月亮。"
-        };
-    }
-
-
-    if (score >= 70) {
-
-        return {
-
-            label:
-                "適合賞月",
-
-            icon:
-                "🌔",
-
-            description:
-                "今晚有不錯的賞月條件，選擇較少雲的位置會更理想。"
-        };
-    }
-
-
-    if (score >= 55) {
-
-        return {
-
-            label:
-                "尚可賞月",
-
-            icon:
-                "🌓",
-
-            description:
-                "今晚仍有機會看到月亮，但雲量或降雨可能有所影響。"
-        };
-    }
-
-
-    if (score >= 35) {
-
-        return {
-
-            label:
-                "賞月條件一般",
-
-            icon:
-                "🌙",
-
-            description:
-                "今晚天氣或月亮高度可能影響觀賞效果。"
-        };
-    }
-
-
-    return {
-
-        label:
-            "較不適合賞月",
-
-        icon:
-            "☁️",
-
-        description:
-            "今晚雲量、降雨或月亮位置可能令觀賞月亮較困難。"
-    };
-}
-
-
-// ==========================================================
-// ⭐ 顯示賞月指數
-// ==========================================================
-
-function renderTonightMoonScore(
-    result
-) {
-
-    if (!result) {
-        return;
-    }
-
-
-    const score =
-        result.score;
-
-
-    const info =
-        getMoonScoreText(
-            score
-        );
-
-
-    // ------------------------------------------------------
-    // 如果 HTML 有預留 ID，就同步更新
-    // ------------------------------------------------------
-
-    const scoreNumber =
-        document.getElementById(
-            "scoreNumber"
-        );
-
-
-    const scoreLabel =
-        document.getElementById(
-            "scoreLabel"
-        );
-
-
-    const scoreDesc =
-        document.getElementById(
-            "scoreDesc"
-        );
-
-
-    const scoreBestTime =
-        document.getElementById(
-            "scoreBestTime"
-        );
-
-
-    if (scoreNumber) {
-
-        scoreNumber.textContent =
-            score;
-    }
-
-
-    if (scoreLabel) {
-
-        scoreLabel.textContent =
-            `${info.icon} ${info.label}`;
-    }
-
-
-    if (scoreDesc) {
-
-        scoreDesc.textContent =
-            info.description;
-    }
-
-
-    if (
-        scoreBestTime &&
-        result.bestRow
-    ) {
-
-        scoreBestTime.textContent =
-            `建議時間 ${String(
-                result.bestRow.hour
-            ).padStart(2, "0")}:00`;
-    }
-
-
-    // ------------------------------------------------------
-    // 建立真正的動態賞月指數卡
-    // ------------------------------------------------------
-
-    let card =
-        document.getElementById(
-            "tonightMoonScore"
-        );
-
-
-    if (!card) {
-
-        card =
-            document.createElement(
-                "section"
-            );
-
-
-        card.id =
-            "tonightMoonScore";
-
-
-        card.style.margin =
-            "20px 0";
-
-
-        card.style.padding =
-            "24px";
-
-
-        card.style.borderRadius =
-            "26px";
-
-
-        card.style.background =
-            "rgba(255,255,255,0.07)";
-
-
-        card.style.border =
-            "1px solid rgba(255,255,255,0.18)";
-
-
-        // --------------------------------------------------
-        // 嘗試放在頁面最前面的內容區
-        // --------------------------------------------------
-
-        const main =
-            document.querySelector(
-                "main"
-            );
-
-
-        if (
-            main &&
-            main.firstElementChild
-        ) {
-
-            main.insertBefore(
-                card,
-                main.firstElementChild
-            );
-
-        } else if (main) {
-
-            main.appendChild(
-                card
-            );
-
-        } else {
-
-            document.body.prepend(
-                card
-            );
-        }
-    }
-
-
-    let bestTimeText =
-        "今晚暫無較佳時段";
-
-
-    if (result.bestRow) {
-
-        bestTimeText =
-            `${String(
-                result.bestRow.hour
-            ).padStart(2, "0")}:00`;
-    }
-
-
-    card.innerHTML = `
-
-        <div style="
-            font-size:17px;
-            font-weight:700;
-            margin-bottom:18px;
-        ">
-            🌕 今晚賞月指數
-        </div>
-
-
-        <div style="
-            display:flex;
-            align-items:center;
-            gap:20px;
-        ">
-
-            <div style="
-                font-size:58px;
-                font-weight:800;
-                line-height:1;
-            ">
-                ${score}
-            </div>
-
-
-            <div>
-
-                <div style="
-                    font-size:20px;
-                    font-weight:700;
-                ">
-                    ${info.icon}
-                    ${info.label}
-                </div>
-
-
-                <div style="
-                    margin-top:6px;
-                    font-size:14px;
-                    opacity:.75;
-                ">
-                    根據今晚天氣及月亮位置計算
-                </div>
-
-            </div>
-
-        </div>
-
-
-        <div style="
-            margin-top:18px;
-            font-size:15px;
-            line-height:1.6;
-            opacity:.85;
-        ">
-            ${info.description}
-        </div>
-
-
-        <div style="
-            margin-top:16px;
-            padding-top:15px;
-            border-top:
-                1px solid rgba(255,255,255,.12);
-            font-size:15px;
-        ">
-            🌟 較佳時段：
-            <strong>
-                ${bestTimeText}
-            </strong>
-        </div>
-
-    `;
-}
-
-
-// ==========================================================
-// 🧹 嘗試移除舊「示範資料」
+// 用於 Moon Watch 的「現在在哪裡」功能。
+// 目的：
+// - 方位角
+// - 高度角
 //
-// 注意：
-// 不會刪除整個月亮卡片，避免影響定位按鈕。
-// ==========================================================
+// 不用作專業天文觀測級定位。
+// ----------------------------------------------------------
 
-function cleanOldDemoText() {
+function calculateMoonPosition(date, lat, lon) {
 
-    const allElements =
-        document.querySelectorAll(
-            "body *"
-        );
+const jd = julianDate(date);
+const d = jd - 2451543.5;
 
+// Moon orbital elements
+const N =
+normalizeDegrees(
+125.1228 - 0.0529538083 * d
+);
 
-    allElements.forEach(
-        element => {
+const i = 5.1454;
 
-            if (
-                element.children.length === 0 &&
-                element.textContent
-            ) {
+const w =
+318.0634 + 0.1643573223 * d;
 
-                const text =
-                    element.textContent.trim();
+const a = 60.2666;
 
+const e = 0.054900;
 
-                if (
-                    text ===
-                    "示範資料"
-                ) {
+const M =
+normalizeDegrees(
+115.3654 + 13.0649929509 * d
+);
 
-                    element.textContent =
-                        "天文計算";
-                }
-            }
-        }
-    );
+const Nrad = degToRad(N);
+const irad = degToRad(i);
+const wrad = degToRad(w);
+const Mrad = degToRad(M);
+
+// Eccentric anomaly
+let E = Mrad;
+
+for (let j = 0; j < 8; j++) {
+E =
+E -
+(
+E - e * Math.sin(E) - Mrad
+) /
+(
+1 - e * Math.cos(E)
+);
 }
 
+// Orbital plane coordinates
+const xv =
+a *
+(
+Math.cos(E) - e
+);
+
+const yv =
+a *
+(
+Math.sqrt(1 - e * e) *
+Math.sin(E)
+);
+
+const v =
+Math.atan2(yv, xv);
+
+const r =
+Math.sqrt(
+xv * xv + yv * yv
+);
+
+// Ecliptic coordinates
+const xh =
+r *
+(
+Math.cos(Nrad) * Math.cos(v + wrad) -
+Math.sin(Nrad) *
+Math.sin(v + wrad) *
+Math.cos(irad)
+);
+
+const yh =
+r *
+(
+Math.sin(Nrad) * Math.cos(v + wrad) +
+Math.cos(Nrad) *
+Math.sin(v + wrad) *
+Math.cos(irad)
+);
+
+const zh =
+r *
+(
+Math.sin(v + wrad) *
+Math.sin(irad)
+);
+
+const lonEcl =
+Math.atan2(yh, xh);
+
+const latEcl =
+Math.atan2(
+zh,
+Math.sqrt(xh * xh + yh * yh)
+);
+
+// --------------------------------------------------------
+// Obliquity of ecliptic
+// --------------------------------------------------------
+
+const ecl =
+degToRad(
+23.4393 - 3.563e-7 * d
+);
+
+// Ecliptic -> Equatorial
+const xe =
+Math.cos(latEcl) *
+Math.cos(lonEcl);
+
+const ye =
+Math.cos(latEcl) *
+Math.sin(lonEcl);
+
+const ze =
+Math.sin(latEcl);
+
+const xeq = xe;
+
+const yeq =
+ye * Math.cos(ecl) -
+ze * Math.sin(ecl);
+
+const zeq =
+ye * Math.sin(ecl) +
+ze * Math.cos(ecl);
+
+let ra =
+Math.atan2(yeq, xeq);
+
+if (ra < 0) {
+ra += Math.PI * 2;
+}
+
+const dec =
+Math.atan2(
+zeq,
+Math.sqrt(
+xeq * xeq +
+yeq * yeq
+)
+);
+
+// --------------------------------------------------------
+// Local Sidereal Time
+// --------------------------------------------------------
+
+const T =
+(jd - 2451545.0) / 36525;
+
+const gmst =
+normalizeDegrees(
+280.46061837 +
+360.98564736629 *
+(jd - 2451545.0) +
+0.000387933 * T * T -
+T * T * T / 38710000
+);
+
+const lst =
+degToRad(
+normalizeDegrees(
+gmst + lon
+)
+);
+
+// Hour angle
+const H =
+normalizeRadians(
+lst - ra
+);
+
+// --------------------------------------------------------
+// Topocentric correction
+// --------------------------------------------------------
+
+const latRad =
+degToRad(lat);
+
+const u =
+Math.atan(
+0.99664719 *
+Math.tan(latRad)
+);
+
+const rhoSin =
+0.99664719 *
+Math.sin(u);
+
+const rhoCos =
+Math.cos(u);
+
+const moonDistance =
+r;
+
+const sinParallax =
+1 / moonDistance;
+
+const cosH = Math.cos(H);
+const sinH = Math.sin(H);
+
+let topocentricRa =
+ra -
+Math.atan2(
+rhoCos *
+sinParallax *
+sinH,
+
+Math.cos(dec) -
+rhoCos *
+sinParallax *
+cosH
+);
+
+const topocentricDec =
+Math.atan2(
+(
+Math.sin(dec) -
+rhoSin * sinParallax
+) *
+Math.cos(
+topocentricRa - ra
+),
+
+Math.cos(dec) -
+rhoCos *
+sinParallax *
+cosH
+);
+
+// --------------------------------------------------------
+// Alt/Az
+// --------------------------------------------------------
+
+const hourAngle =
+normalizeRadians(
+lst - topocentricRa
+);
+
+const sinAlt =
+Math.sin(latRad) *
+Math.sin(topocentricDec) +
+Math.cos(latRad) *
+Math.cos(topocentricDec) *
+Math.cos(hourAngle);
+
+let altitude =
+radToDeg(
+Math.asin(
+Math.max(-1, Math.min(1, sinAlt))
+)
+);
+
+let azimuth =
+radToDeg(
+Math.atan2(
+Math.sin(hourAngle),
+
+Math.cos(hourAngle) *
+Math.sin(latRad) -
+Math.tan(topocentricDec) *
+Math.cos(latRad)
+)
+);
+
+azimuth =
+normalizeDegrees(
+azimuth + 180
+);
+
+// --------------------------------------------------------
+// 大氣折射
+// 只對地平線以上位置修正
+// --------------------------------------------------------
+
+if (altitude > -1 && altitude < 90) {
+const refraction =
+1.02 /
+Math.tan(
+degToRad(
+altitude +
+10.3 /
+(altitude + 5.11)
+)
+) /
+60;
+
+altitude += refraction;
+}
+
+return {
+azimuth,
+altitude
+};
+}
+
+// ----------------------------------------------------------
+// 方位文字
+// ----------------------------------------------------------
+
+function getDirectionName(azimuth) {
+const directions = [
+"北",
+"北北東",
+"東北",
+"東北偏東",
+"東",
+"東南偏東",
+"東南",
+"南南東",
+"南",
+"南南西",
+"西南",
+"西南偏西",
+"西",
+"西北偏西",
+"西北",
+"北北西"
+];
+
+const index =
+Math.round(
+normalizeDegrees(azimuth) / 22.5
+) % 16;
+
+return directions[index];
+}
+
+// ----------------------------------------------------------
+// 即時月亮位置
+//
+// 直接寫入原本：
+// .direction-big
+// .direction .muted
+// ----------------------------------------------------------
+
+function updateMoonPosition() {
+if (!directionBigEl || !directionMutedEl) {
+return;
+}
+
+const position =
+calculateMoonPosition(
+new Date(),
+currentLocation.lat,
+currentLocation.lon
+);
+
+const azimuth =
+Math.round(
+normalizeDegrees(position.azimuth)
+);
+
+const altitude =
+Math.round(
+position.altitude
+);
+
+const direction =
+getDirectionName(azimuth);
+
+directionBigEl.textContent =
+`${direction} ${azimuth}°`;
+
+if (altitude >= 0) {
+directionMutedEl.textContent =
+`月亮高度約 ${altitude}° · 天文計算`;
+} else {
+directionMutedEl.textContent =
+`月亮高度約 ${altitude}° · 目前在地平線以下`;
+}
+
+// 原本箭咀是 ↗
+// 將它大致旋轉到月亮所在方向
+if (needleEl) {
+needleEl.style.transform =
+`rotate(${azimuth - 45}deg)`;
+needleEl.style.transformOrigin =
+"center center";
+}
+
+console.log(
+"🌕 Moon position",
+{
+latitude: currentLocation.lat,
+longitude: currentLocation.lon,
+azimuth,
+altitude,
+direction
+}
+);
+}
 
 // ==========================================================
-// 🌦 載入 Open-Meteo
+// 🌕 今晚賞月指數
 // ==========================================================
 
-async function loadWeather(
-    lat = currentLocation.lat,
-    lon = currentLocation.lon
+function calculateWeatherScore(row) {
+if (!row) return 0;
+
+const cloud =
+row.cloud != null
+? Number(row.cloud)
+: 50;
+
+const rain =
+row.rainProbability != null
+? Number(row.rainProbability)
+: 30;
+
+const visibility =
+row.visibility != null
+? Number(row.visibility)
+: 10000;
+
+// --------------------------------------------------------
+// 雲量分
+// 45%
+// --------------------------------------------------------
+
+const cloudScore =
+Math.max(
+0,
+Math.min(
+100,
+100 - cloud
+)
+);
+
+// --------------------------------------------------------
+// 降雨機率分
+// 30%
+// --------------------------------------------------------
+
+const rainScore =
+Math.max(
+0,
+Math.min(
+100,
+100 - rain
+)
+);
+
+// --------------------------------------------------------
+// 能見度
+// 15%
+// --------------------------------------------------------
+
+const visibilityKm =
+visibility / 1000;
+
+let visibilityScore;
+
+if (visibilityKm >= 15) {
+visibilityScore = 100;
+} else if (visibilityKm >= 10) {
+visibilityScore = 90;
+} else if (visibilityKm >= 7) {
+visibilityScore = 80;
+} else if (visibilityKm >= 5) {
+visibilityScore = 65;
+} else if (visibilityKm >= 3) {
+visibilityScore = 45;
+} else {
+visibilityScore = 20;
+}
+
+return (
+cloudScore * 0.45 +
+rainScore * 0.30 +
+visibilityScore * 0.15
+);
+}
+
+// ----------------------------------------------------------
+// 月亮高度分
+// 10%
+// ----------------------------------------------------------
+
+function calculateMoonVisibilityScore(date) {
+const position =
+calculateMoonPosition(
+date,
+currentLocation.lat,
+currentLocation.lon
+);
+
+const altitude =
+position.altitude;
+
+// 地平線以下
+if (altitude < -5) {
+return 0;
+}
+
+// 剛剛升起
+if (altitude < 5) {
+return 35;
+}
+
+if (altitude < 15) {
+return 60;
+}
+
+if (altitude < 30) {
+return 80;
+}
+
+if (altitude < 50) {
+return 100;
+}
+
+// 太高仍然可以看
+return 90;
+}
+
+// ----------------------------------------------------------
+// 今晚賞月指數
+// ----------------------------------------------------------
+
+function calculateTonightScore(data) {
+const rows =
+getTonightRows(data);
+
+if (!rows.length || !scoreNumber) {
+return;
+}
+
+const tonightScores = [];
+
+rows.forEach(row => {
+
+// 建立香港時間該小時的 Date
+const dateText =
+`${row.time}:00`;
+
+const timestamp =
+parseLocalDateTime(dateText);
+
+if (timestamp == null) {
+return;
+}
+
+const date =
+new Date(timestamp);
+
+const weatherScore =
+calculateWeatherScore(row);
+
+const moonScore =
+calculateMoonVisibilityScore(date);
+
+// 天氣部分佔 90%
+// 月亮高度佔 10%
+const total =
+weatherScore * 0.90 +
+moonScore * 0.10;
+
+tonightScores.push({
+hour: row.hour,
+total,
+weatherScore,
+moonScore,
+date
+});
+});
+
+if (!tonightScores.length) {
+return;
+}
+
+// 找出今晚最佳時段
+tonightScores.sort(
+(a, b) =>
+b.total - a.total
+);
+
+const best =
+tonightScores[0];
+
+let score =
+Math.round(best.total);
+
+score =
+Math.max(
+0,
+Math.min(
+100,
+score
+)
+);
+
+// --------------------------------------------------------
+// 分級文字
+// --------------------------------------------------------
+
+let title;
+
+if (score >= 85) {
+title = "非常適合賞月";
+} else if (score >= 70) {
+title = "適合賞月";
+} else if (score >= 50) {
+title = "天氣一般";
+} else if (score >= 30) {
+title = "賞月條件較差";
+} else {
+title = "今晚不太適合賞月";
+}
+
+// --------------------------------------------------------
+// 建議時段
+// --------------------------------------------------------
+
+const bestHourText =
+`${pad2(best.hour)}:00`;
+
+let description;
+
+if (score >= 70) {
+description =
+`建議 ${bestHourText} 前後到戶外看看月亮`;
+} else {
+description =
+`較佳時段：${bestHourText}`;
+}
+
+// --------------------------------------------------------
+// 寫入原本 92 的位置
+// --------------------------------------------------------
+
+scoreNumber.textContent =
+score;
+
+if (scoreTitle) {
+scoreTitle.textContent =
+title;
+}
+
+if (scoreDescription) {
+scoreDescription.textContent =
+description;
+}
+
+// 將最佳時段另外顯示在 description 後面
+// 如果原本 CSS 只容納一行，就不額外建立新元素
+console.log(
+"🌕 今晚賞月指數",
+{
+score,
+title,
+bestHour: bestHourText,
+weatherScore: Math.round(best.weatherScore),
+moonScore: Math.round(best.moonScore)
+}
+);
+}
+
+// ==========================================================
+// 🌅 月出倒數
+// ==========================================================
+
+function getTodayMoonriseTimestamp() {
+if (
+!currentMoonData ||
+!currentMoonData.moonrise
 ) {
-
-    try {
-
-        if (weatherSummaryEl) {
-
-            weatherSummaryEl.textContent =
-                "正在取得 Open-Meteo 天氣資料…";
-        }
-
-
-        const url =
-            "https://api.open-meteo.com/v1/forecast"
-            +
-            `?latitude=${lat}`
-            +
-            `&longitude=${lon}`
-            +
-            "&hourly="
-            +
-            "temperature_2m,"
-            +
-            "precipitation_probability,"
-            +
-            "cloud_cover,"
-            +
-            "visibility,"
-            +
-            "weather_code"
-            +
-            "&daily="
-            +
-            "moonrise,"
-            +
-            "moonset,"
-            +
-            "moon_phase"
-            +
-            "&forecast_days=2"
-            +
-            "&timezone=Asia%2FHong_Kong";
-
-
-        const response =
-            await fetch(
-                url
-            );
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                `Open-Meteo HTTP ${response.status}`
-            );
-        }
-
-
-        const data =
-            await response.json();
-
-
-        // ==================================================
-        // 目前天氣
-        // ==================================================
-
-        const today =
-            getHongKongDateString();
-
-
-        const nowHour =
-            getHongKongHour();
-
-
-        let currentIndex =
-            data.hourly.time.findIndex(
-                time => {
-
-                    return (
-                        time.startsWith(
-                            today
-                        )
-                        &&
-                        Number(
-                            time.slice(11, 13)
-                        ) === nowHour
-                    );
-                }
-            );
-
-
-        if (currentIndex < 0) {
-
-            currentIndex = 0;
-        }
-
-
-        const currentTemp =
-            data.hourly
-                .temperature_2m[
-                    currentIndex
-                ];
-
-
-        const currentCloud =
-            data.hourly
-                .cloud_cover[
-                    currentIndex
-                ];
-
-
-        const currentCode =
-            data.hourly
-                .weather_code[
-                    currentIndex
-                ];
-
-
-        if (weatherTempEl) {
-
-            weatherTempEl.textContent =
-                `${Math.round(
-                    currentTemp
-                )}°C`;
-        }
-
-
-        if (weatherSummaryEl) {
-
-            weatherSummaryEl.textContent =
-                `${weatherIcon(
-                    currentCode
-                )} ${
-                    weatherText(
-                        currentCode
-                    )
-                } · 雲量 ${
-                    Math.round(
-                        currentCloud
-                    )
-                }%`;
-        }
-
-
-        if (weatherUpdatedEl) {
-
-            weatherUpdatedEl.textContent =
-                "資料來源：Open-Meteo";
-        }
-
-
-        // ==================================================
-        // 今晚天氣
-        // ==================================================
-
-        const tonightRows =
-            getTonightRows(
-                data
-            );
-
-
-        renderHourlyWeather(
-            tonightRows
-        );
-
-
-        // ==================================================
-        // 月相 / 月出 / 月落
-        // ==================================================
-
-        renderMoonData(
-            data
-        );
-
-
-        // ==================================================
-        // ⭐ 今晚賞月指數
-        // ==================================================
-
-        const scoreResult =
-            calculateTonightMoonScore(
-                tonightRows
-            );
-
-
-        renderTonightMoonScore(
-            scoreResult
-        );
-
-
-        // ==================================================
-        // 🌕 即時月亮位置
-        // ==================================================
-
-        renderMoonPosition();
-
-
-        // ==================================================
-        // 清理舊示範文字
-        // ==================================================
-
-        cleanOldDemoText();
-
-
-        // ==================================================
-        // Console
-        // ==================================================
-
-        console.log(
-            "🌕 Moon Watch HK V0.5.1",
-            {
-                location:
-                    currentLocation,
-
-                moonScore:
-                    scoreResult,
-
-                tonightRows:
-                    tonightRows
-            }
-        );
-
-
-    } catch (error) {
-
-        console.error(
-            "Open-Meteo error:",
-            error
-        );
-
-
-        if (weatherSummaryEl) {
-
-            weatherSummaryEl.textContent =
-                "暫時未能取得天氣資料";
-        }
-
-
-        showToast(
-            "暫時未能取得 Open-Meteo 天氣資料"
-        );
-    }
+return null;
 }
 
+return parseLocalDateTime(
+currentMoonData.moonrise
+);
+}
+
+function startMoonriseCountdown() {
+if (countdownTimer) {
+clearInterval(countdownTimer);
+}
+
+function updateCountdown() {
+const moonriseTimestamp =
+getTodayMoonriseTimestamp();
+
+if (!moonriseTimestamp) {
+if (countdownEl) {
+countdownEl.textContent =
+"--:--:--";
+}
+
+if (countdownTextEl) {
+countdownTextEl.textContent =
+"正在取得真實月出資料…";
+}
+
+return;
+}
+
+const now =
+Date.now();
+
+const diff =
+moonriseTimestamp - now;
+
+if (diff > 0) {
+
+if (countdownEl) {
+countdownEl.textContent =
+formatDuration(diff);
+}
+
+if (countdownTextEl) {
+countdownTextEl.textContent =
+"距離月出還有";
+}
+
+} else {
+
+if (countdownEl) {
+countdownEl.textContent =
+"🌕 已月出";
+}
+
+if (countdownTextEl) {
+const elapsed =
+now - moonriseTimestamp;
+
+const hours =
+Math.floor(
+elapsed / 3600000
+);
+
+const minutes =
+Math.floor(
+(elapsed % 3600000) /
+60000
+);
+
+if (hours > 0) {
+countdownTextEl.textContent =
+`月亮已升起約 ${hours} 小時 ${minutes} 分鐘`;
+} else {
+countdownTextEl.textContent =
+`月亮已升起約 ${minutes} 分鐘`;
+}
+}
+}
+}
+
+updateCountdown();
+
+countdownTimer =
+setInterval(
+updateCountdown,
+1000
+);
+}
 
 // ==========================================================
 // 📍 使用我的位置
@@ -2442,166 +1408,122 @@ async function loadWeather(
 
 function useMyLocation() {
 
-    if (!navigator.geolocation) {
-
-        showToast(
-            "你的裝置不支援定位功能"
-        );
-
-        return;
-    }
-
-
-    showToast(
-        "正在取得你的位置…"
-    );
-
-
-    navigator.geolocation.getCurrentPosition(
-
-        position => {
-
-            currentLocation = {
-
-                lat:
-                    position.coords.latitude,
-
-                lon:
-                    position.coords.longitude,
-
-                name:
-                    "我的位置"
-            };
-
-
-            showToast(
-                "已使用你的位置"
-            );
-
-
-            loadWeather(
-                currentLocation.lat,
-                currentLocation.lon
-            );
-        },
-
-
-        error => {
-
-            console.error(
-                "Geolocation error:",
-                error
-            );
-
-
-            showToast(
-                "未能取得位置，繼續使用香港預設位置"
-            );
-        },
-
-
-        {
-            enableHighAccuracy:
-                true,
-
-            timeout:
-                10000,
-
-            maximumAge:
-                300000
-        }
-    );
+if (!navigator.geolocation) {
+showToast("此瀏覽器不支援定位功能");
+return;
 }
 
-
-// ==========================================================
-// 🔔 Toast
-// ==========================================================
-
-function showToast(
-    message
-) {
-
-    if (!toastEl) {
-        return;
-    }
-
-
-    toastEl.textContent =
-        message;
-
-
-    toastEl.classList.add(
-        "show"
-    );
-
-
-    clearTimeout(
-        window.toastTimer
-    );
-
-
-    window.toastTimer =
-        setTimeout(
-            () => {
-
-                toastEl.classList.remove(
-                    "show"
-                );
-
-            },
-            3000
-        );
+if (locationBtn) {
+locationBtn.disabled = true;
+locationBtn.textContent =
+"📍 正在取得位置…";
 }
 
+navigator.geolocation.getCurrentPosition(
+position => {
+
+currentLocation = {
+lat: position.coords.latitude,
+lon: position.coords.longitude,
+name: "我的位置"
+};
+
+const locationEl =
+document.querySelector(".location");
+
+if (locationEl) {
+locationEl.textContent =
+"📍 我的目前位置";
+}
+
+if (locationBtn) {
+locationBtn.disabled = false;
+locationBtn.textContent =
+"📍 使用我的位置";
+}
+
+showToast("已使用你的目前位置");
+
+// 重新取得該位置的天氣 / 月出月落
+loadWeather(currentLocation);
+},
+
+error => {
+
+console.error(
+"Geolocation error:",
+error
+);
+
+if (locationBtn) {
+locationBtn.disabled = false;
+locationBtn.textContent =
+"📍 使用我的位置";
+}
+
+if (error.code === 1) {
+showToast(
+"你拒絕了定位權限，現時使用香港預設位置"
+);
+} else {
+showToast(
+"無法取得位置，現時使用香港預設位置"
+);
+}
+},
+
+{
+enableHighAccuracy: true,
+timeout: 15000,
+maximumAge: 60000
+}
+);
+}
 
 // ==========================================================
-// 📍 按鈕
+// 選單
+// ==========================================================
+
+const menuBtn =
+document.querySelector(".menu-btn");
+
+if (menuBtn) {
+menuBtn.addEventListener(
+"click",
+() => {
+showToast(
+"Moon Watch HK 選單功能稍後加入"
+);
+}
+);
+}
+
+// ==========================================================
+// Location button
 // ==========================================================
 
 if (locationBtn) {
-
-    locationBtn.addEventListener(
-        "click",
-        useMyLocation
-    );
+locationBtn.addEventListener(
+"click",
+useMyLocation
+);
 }
 
-
 // ==========================================================
-// 🚀 啟動
-// ==========================================================
-
-cleanOldDemoText();
-
-
-// 預設香港位置
-loadWeather(
-    DEFAULT_LOCATION.lat,
-    DEFAULT_LOCATION.lon
-);
-
-
-// ==========================================================
-// 🔄 每 30 秒更新即時月亮位置
-// ==========================================================
-
-clearInterval(
-    window.moonPositionTimer
-);
-
-
-window.moonPositionTimer =
-    setInterval(
-        renderMoonPosition,
-        30000
-    );
-
-
-// ==========================================================
-// 完成
+// 啟動
 // ==========================================================
 
 console.log(
-    "🌕 Moon Watch HK V0.5.1 已啟動"
+"🌕 Moon Watch HK V0.5 啟動"
 );
+
+console.log(
+"📍 預設位置：",
+currentLocation
+);
+
+loadWeather(
+currentLocation
+);
+
+})();
