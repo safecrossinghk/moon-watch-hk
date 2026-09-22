@@ -1,144 +1,439 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  >
+
   <meta name="theme-color" content="#071936">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>中秋賞月｜Moon Watch HK</title>
+
+  <meta
+    name="apple-mobile-web-app-capable"
+    content="yes"
+  >
+
+  <meta
+    name="apple-mobile-web-app-status-bar-style"
+    content="black-translucent"
+  >
+
+  <title>香港賞月｜Moon Watch HK</title>
+
   <link rel="stylesheet" href="./styles.css">
 </head>
+
 <body>
+
   <main class="app">
+
+    <!-- =========================
+         頂部
+    ========================== -->
+
     <header class="topbar">
+
       <div>
-        <div class="brand">🌕 中秋賞月</div>
-        <div class="brand-sub">Moon Watch HK · 2026 中秋限定</div>
+        <div class="brand">🌕 香港賞月</div>
+        <div class="brand-sub">Moon Watch HK</div>
       </div>
-      <button class="menu-btn" aria-label="開啟選單">☰</button>
+
+      <button
+        class="menu-btn"
+        id="menuBtn"
+        aria-label="開啟選單"
+        aria-expanded="false"
+      >
+        ☰
+      </button>
+
     </header>
 
+
+    <!-- =========================
+         選單
+    ========================== -->
+
+    <nav
+      class="site-menu"
+      id="siteMenu"
+      aria-hidden="true"
+    >
+
+      <div class="site-menu-inner">
+
+        <div class="menu-title">
+          🌕 Moon Watch HK
+        </div>
+
+        <a href="#scoreSection">
+          🌕 今晚賞月指數
+        </a>
+
+        <a href="#weatherSection">
+          🌤️ 今晚天氣
+        </a>
+
+        <a href="#moonSection">
+          🔭 月亮現在在哪裡
+        </a>
+
+        <a href="#moonriseSection">
+          🌅 月出・月落
+        </a>
+
+        <a href="#aboutSection">
+          ℹ️ 關於 Moon Watch HK
+        </a>
+
+        <button
+          class="menu-close"
+          id="menuClose"
+          type="button"
+        >
+          關閉選單
+        </button>
+
+      </div>
+
+    </nav>
+
+
+    <!-- =========================
+         Hero
+    ========================== -->
+
     <section class="hero">
+
       <div class="stars"></div>
-      <div class="moon" aria-label="月亮"></div>
+
+      <div
+        class="moon"
+        aria-label="月亮"
+      ></div>
+
       <div class="cloud cloud-a"></div>
       <div class="cloud cloud-b"></div>
 
       <div class="hero-copy">
-        <p class="eyebrow">今晚，抬頭看看</p>
-        <h1>月亮值得你<br>出門看看。</h1>
-        <p class="location">📍 香港</p>
+
+        <p class="eyebrow">
+          今晚，抬頭看看
+        </p>
+
+        <h1>
+          月亮值得你<br>
+          出門看看。
+        </h1>
+
+        <p class="mid-autumn">
+          中秋節快樂
+        </p>
+
+        <p class="location">
+          📍 香港
+        </p>
+
       </div>
+
     </section>
 
-    <section class="score-card">
+
+    <!-- =========================
+         今晚賞月指數
+    ========================== -->
+
+    <section
+      class="score-card"
+      id="scoreSection"
+    >
+
       <div class="score-ring">
-        <div class="score-number">92</div>
-        <div class="score-unit">/ 100</div>
+
+        <div
+          class="score-number"
+          id="scoreNumber"
+        >
+          --
+        </div>
+
+        <div class="score-unit">
+          / 100
+        </div>
+
       </div>
+
       <div class="score-copy">
-        <div class="small-label">🌕 今晚賞月指數</div>
-        <h2>非常適合賞月</h2>
-        <p>建議 20:00 – 22:00 到戶外看看月亮</p>
+
+        <div class="small-label">
+          🌕 今晚賞月指數
+        </div>
+
+        <h2 id="scoreTitle">
+          正在分析…
+        </h2>
+
+        <p id="scoreDescription">
+          正在取得天氣及月亮資料…
+        </p>
+
       </div>
+
     </section>
 
-    <section class="quick-grid">
-<article class="info-card">
-<span class="icon">🌙</span>
-<div>
-<span class="label">月相</span>
-<strong id="moonPhase">載入中…</strong>
-<small id="moonPhasePercent">正在取得資料</small>
-</div>
-</article>
+
+    <!-- =========================
+         天氣 + 月相
+         天氣放左面
+    ========================== -->
+
+    <section
+      class="quick-grid"
+      id="weatherSection"
+    >
+
+      <!-- 今晚天氣 -->
 
       <article class="info-card">
-<span class="icon">🌤️</span>
-<div>
-<span class="label">今晚天氣</span>
-<strong id="weatherSummary">載入中…</strong>
-<small id="weatherTemp">正在取得 Open-Meteo 資料</small>
-</div>
-</article>
-<article class="info-card">
-<span class="icon">🌅</span>
-<div>
-<span class="label">月出</span>
-<strong id="moonriseTime">--:--</strong>
-<small id="moonriseLabel">正在取得資料</small>
-</div>
-</article>
 
-<article class="info-card">
-<span class="icon">🌌</span>
-<div>
-<span class="label">月落</span>
-<strong id="moonsetTime">--:--</strong>
-<small id="moonsetLabel">正在取得資料</small>
-</div>
-</article>
-    </section>
+        <span class="icon">
+          🌤️
+        </span>
 
-    <section class="weather-hours">
-      <div class="section-heading">
-        <span>☁️ 今晚逐小時天氣</span>
-        <span id="weatherUpdated" class="live-dot">載入中</span>
-      </div>
-      <div id="hourlyWeather" class="hourly-weather">
-        <div class="weather-loading">正在取得 Open-Meteo 天氣資料…</div>
-      </div>
-    </section>
-
-    <section class="countdown-card">
-      <div class="section-heading">
-        <span>🌕 月出倒數</span>
-        <span class="live-dot">● LIVE</span>
-      </div>
-      <div id="countdown" class="countdown">00:18:42</div>
-      <p id="countdownText">正在取得真實月出資料…</p>
-<div class="arc">
-<span class="arc-left">月出<br><b id="moonriseArcTime">--:--</b></span>
-<span class="arc-moon">🌕</span>
-<span class="arc-right">月落<br><b id="moonsetArcTime">--:--</b></span>
-</div>
-    </section>
-
-    <section class="details">
-      <div class="section-heading">
-        <span>🔭 月亮現在在哪裡？</span>
-        <span class="chevron">›</span>
-      </div>
-      <div class="direction">
-        <div class="compass">
-          <span class="north">N</span>
-          <span class="east">E</span>
-          <span class="south">S</span>
-          <span class="west">W</span>
-          <span class="needle">↗</span>
-        </div>
         <div>
-          <div class="direction-big">東南偏東 118°</div>
-          <div class="muted">月亮高度約 32° · 示範資料</div>
+
+          <span class="label">
+            今晚天氣
+          </span>
+
+          <strong id="weatherSummary">
+            載入中…
+          </strong>
+
+          <small id="weatherTemp">
+            正在取得 Open-Meteo 資料
+          </small>
+
         </div>
-      </div>
-      <button class="primary-btn" id="locationBtn">📍 使用我的位置</button>
+
+      </article>
+
+
+      <!-- 月相 -->
+
+      <article class="info-card">
+
+        <span class="icon">
+          🌙
+        </span>
+
+        <div>
+
+          <span class="label">
+            月相
+          </span>
+
+          <strong id="moonPhase">
+            載入中…
+          </strong>
+
+        </div>
+
+      </article>
+
+
+      <!-- 月出 -->
+
+      <article
+        class="info-card"
+        id="moonriseSection"
+      >
+
+        <span class="icon">
+          🌅
+        </span>
+
+        <div>
+
+          <span class="label">
+            月出
+          </span>
+
+          <strong id="moonriseTime">
+            --:--
+          </strong>
+
+        </div>
+
+      </article>
+
+
+      <!-- 月落 -->
+
+      <article class="info-card">
+
+        <span class="icon">
+          🌌
+        </span>
+
+        <div>
+
+          <span class="label">
+            月落
+          </span>
+
+          <strong id="moonsetTime">
+            --:--
+          </strong>
+
+        </div>
+
+      </article>
+
     </section>
 
-    <section class="tips">
-      <div class="section-heading"><span>💡 今晚賞月提示</span></div>
-      <p>找一個視野開闊、少受高樓遮擋的位置。雲層較少時，月亮會更容易看見。</p>
+
+    <!-- =========================
+         月亮現在在哪裡
+    ========================== -->
+
+    <section
+      class="details"
+      id="moonSection"
+    >
+
+      <div class="section-heading">
+
+        <span>
+          🔭 月亮現在在哪裡？
+        </span>
+
+        <span class="chevron">
+          ›
+        </span>
+
+      </div>
+
+
+      <div class="direction">
+
+        <div class="compass">
+
+          <span class="north">
+            N
+          </span>
+
+          <span class="east">
+            E
+          </span>
+
+          <span class="south">
+            S
+          </span>
+
+          <span class="west">
+            W
+          </span>
+
+          <span
+            class="needle"
+            id="moonNeedle"
+          >
+            ↗
+          </span>
+
+        </div>
+
+
+        <div>
+
+          <div
+            class="direction-big"
+            id="moonDirection"
+          >
+            正在計算…
+          </div>
+
+          <div
+            class="muted"
+            id="moonPositionText"
+          >
+            正在取得月亮位置…
+          </div>
+
+        </div>
+
+      </div>
+
     </section>
+
+
+    <!-- =========================
+         關於
+    ========================== -->
+
+    <section
+      class="about-section"
+      id="aboutSection"
+    >
+
+      <div class="section-heading">
+        <span>ℹ️ 關於 Moon Watch HK</span>
+      </div>
+
+      <p>
+        Moon Watch HK 是一個以香港賞月為主題的實時資訊網站，
+        提供月相、月出、月落、天氣及月亮位置資料。
+      </p>
+
+      <p>
+        天氣資料來自 Open-Meteo；
+        月亮位置則由天文計算得出。
+        實際觀測仍可能受到雲層、高樓及地形影響。
+      </p>
+
+    </section>
+
+
+    <!-- =========================
+         Footer
+    ========================== -->
 
     <footer>
-      <div class="footer-title">🌕 中秋賞月 · Moon Watch HK</div>
-      <p>2026 中秋限定網站 · V1.0</p>
-      <p>目前月亮及天氣數值為示範資料，下一階段接入真實資料。</p>
+
+      <div class="footer-title">
+        🌕 香港賞月 · Moon Watch HK
+      </div>
+
+      <p>
+        2026 中秋特別版
+      </p>
+
+      <p>
+        天氣及天文資料僅供參考。
+      </p>
+
     </footer>
+
   </main>
 
-  <div id="toast" class="toast" role="status"></div>
+
+  <!-- =========================
+       CounterAPI
+       只計數，不在頁面顯示
+  ========================== -->
+
+  <script
+    src="https://cdn.jsdelivr.net/npm/counterapi/dist/counter.browser.min.js"
+  ></script>
+
+
+  <!-- 主程式 -->
+
   <script src="./app.js"></script>
+
 </body>
 </html>
