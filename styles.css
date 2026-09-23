@@ -428,15 +428,6 @@ button {
   text-align: center;
 }
 
-.eyebrow {
-  margin: 0 0 8px;
-
-  color: var(--gold);
-
-  font-size: 14px;
-  font-weight: 700;
-}
-
 .hero h1 {
   margin: 0;
 
@@ -966,4 +957,13 @@ footer p {
       0 30px 100px rgba(0,0,0,.4);
   }
 
+}
+
+
+.site-menu a,
+.site-menu a:visited,
+.site-menu a:hover,
+.site-menu a:active {
+  color: inherit;
+  text-decoration: none;
 }
