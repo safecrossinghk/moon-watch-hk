@@ -35,15 +35,10 @@ const DEFAULT_LOCATION = {
    CounterAPI 設定
    ==================================================
 
-   如果你已有 CounterAPI workspace，
-   將下面名稱改成你的 workspace。
-
-   網頁不會顯示瀏覽人次。
-   只會在 CounterAPI 後台記錄。
-   ================================================== */
 
 const COUNTER_WORKSPACE = "moon-watch-hk";
-const COUNTER_NAME = "page-views";
+const COUNTER_NAME = "moon-watch-hk";
+const COUNTER_API_KEY = "ut_BOL8Qvqe55faGPve7aLSNjpfDRGXdUTEp245Vx8L";
 
 
 /* ==================================================
@@ -232,7 +227,10 @@ async function trackPageView() {
     const counter =
       new Counter({
         workspace:
-          COUNTER_WORKSPACE
+          COUNTER_WORKSPACE,
+
+        accessToken:
+          COUNTER_API_KEY
       });
 
 
