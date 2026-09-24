@@ -14,6 +14,7 @@
    8. 原本月亮位置卡片
    9. 右上角選單
    10. CounterAPI 隱藏式瀏覽次數
+   11. 維多利亞公園即時人流
 
    ================================================== */
 
@@ -29,6 +30,14 @@ const DEFAULT_LOCATION = {
   lat: 22.3193,
   lon: 114.1694
 };
+
+
+/* ==================================================
+   維多利亞公園人流 Worker
+   ================================================== */
+
+const VICTORIA_PARK_WORKER =
+  "https://tiny-disk-0d7b.ctakwah.workers.dev/";
 
 
 /* ==================================================
@@ -95,6 +104,20 @@ const toast =
 
 
 /* ==================================================
+   維多利亞公園人流 DOM
+   ================================================== */
+
+const crowdStatus =
+  document.getElementById("crowdStatus");
+
+const crowdPercentage =
+  document.getElementById("crowdPercentage");
+
+const crowdUpdated =
+  document.getElementById("crowdUpdated");
+
+
+/* ==================================================
    Toast
    ================================================== */
 
@@ -104,7 +127,8 @@ function showToast(message) {
     return;
   }
 
-  toast.textContent = message;
+  toast.textContent =
+    message;
 
   toast.classList.add("show");
 
@@ -266,6 +290,340 @@ trackPageView();
 
 
 /* ==================================================
+   維多利亞公園人流
+   ==================================================
+
+   使用現有 Cloudflare Worker：
+
+   https://tiny-disk-0d7b.ctakwah.workers.dev/
+
+   查詢：
+
+   維多利亞公園
+
+   不顯示：
+   - 地圖
+   - 未來 3 小時預測
+   - 搜尋框
+
+   只顯示：
+   - 現時人流狀態
+   - 百分比
+   - 查詢時間
+
+   ================================================== */
+
+async function loadVictoriaParkCrowd() {
+
+  if (
+    !crowdStatus ||
+    !crowdPercentage ||
+    !crowdUpdated
+  ) {
+
+    return;
+  }
+
+
+  try {
+
+    crowdStatus.textContent =
+      "載入中…";
+
+    crowdPercentage.textContent =
+      "--%";
+
+    crowdUpdated.textContent =
+      "正在查詢現場人流…";
+
+
+    const url =
+      VICTORIA_PARK_WORKER +
+      "?query=" +
+      encodeURIComponent(
+        "維多利亞公園"
+      );
+
+
+    const response =
+      await fetch(
+        url,
+        {
+          cache: "no-store"
+        }
+      );
+
+
+    if (!response.ok) {
+
+      throw new Error(
+        `Crowd Worker HTTP ${response.status}`
+      );
+    }
+
+
+    const data =
+      await response.json();
+
+
+    const percentage =
+      getCrowdPercentage(
+        data
+      );
+
+
+    if (
+      !Number.isFinite(
+        percentage
+      )
+    ) {
+
+      throw new Error(
+        "找不到人流百分比"
+      );
+    }
+
+
+    renderVictoriaParkCrowd(
+      percentage
+    );
+
+
+  } catch (error) {
+
+    console.error(
+      "Victoria Park crowd error:",
+      error
+    );
+
+
+    crowdStatus.textContent =
+      "暫時無法取得";
+
+
+    crowdPercentage.textContent =
+      "--%";
+
+
+    crowdUpdated.textContent =
+      "請稍後重新整理";
+
+  }
+}
+
+
+/* ==================================================
+   取得人流百分比
+   ================================================== */
+
+function getCrowdPercentage(data) {
+
+  if (!data) {
+    return null;
+  }
+
+
+  /*
+     第一優先：
+     Worker 的 popular_times
+     中 day = live 的資料。
+  */
+
+  if (
+    Array.isArray(
+      data.popular_times
+    )
+  ) {
+
+    const live =
+      data.popular_times.find(
+        item =>
+          String(
+            item.day || ""
+          ).toLowerCase() ===
+          "live"
+      );
+
+
+    if (
+      live &&
+      Number.isFinite(
+        Number(
+          live.percentage
+        )
+      )
+    ) {
+
+      return Number(
+        live.percentage
+      );
+    }
+  }
+
+
+  /*
+     如果 Worker 直接提供
+     percentage，也可以使用。
+  */
+
+  if (
+    Number.isFinite(
+      Number(
+        data.percentage
+      )
+    )
+  ) {
+
+    return Number(
+      data.percentage
+    );
+  }
+
+
+  /*
+     兼容 current.percentage。
+  */
+
+  if (
+    data.current &&
+    Number.isFinite(
+      Number(
+        data.current.percentage
+      )
+    )
+  ) {
+
+    return Number(
+      data.current.percentage
+    );
+  }
+
+
+  return null;
+}
+
+
+/* ==================================================
+   顯示維多利亞公園人流
+   ================================================== */
+
+function renderVictoriaParkCrowd(
+  percentage
+) {
+
+  percentage =
+    clamp(
+      Math.round(
+        percentage
+      ),
+      0,
+      100
+    );
+
+
+  let status =
+    "🟡 正常";
+
+
+  let statusColor =
+    "#f2c94c";
+
+
+  /*
+     < 20%
+     偏少
+  */
+
+  if (
+    percentage < 20
+  ) {
+
+    status =
+      "🟢 偏少";
+
+    statusColor =
+      "#55d68a";
+  }
+
+
+  /*
+     20% - 79%
+     正常
+  */
+
+  else if (
+    percentage < 80
+  ) {
+
+    status =
+      "🟡 正常";
+
+    statusColor =
+      "#f2c94c";
+  }
+
+
+  /*
+     >= 80%
+     非常繁忙
+  */
+
+  else {
+
+    status =
+      "🔴 非常繁忙";
+
+    statusColor =
+      "#ff6b6b";
+  }
+
+
+  crowdStatus.textContent =
+    status;
+
+
+  crowdPercentage.textContent =
+    `${percentage}%`;
+
+
+  /*
+     只為人流狀態加入顏色，
+     不修改其他 Moon Watch HK 顏色。
+  */
+
+  crowdStatus.style.color =
+    statusColor;
+
+
+  crowdPercentage.style.color =
+    statusColor;
+
+
+  const now =
+    new Date();
+
+
+  const time =
+    now.toLocaleTimeString(
+      "zh-HK",
+      {
+        timeZone:
+          "Asia/Hong_Kong",
+
+        hour: "2-digit",
+        minute: "2-digit",
+
+        hour12: false
+      }
+    );
+
+
+  crowdUpdated.textContent =
+    `最後查詢 ${time}`;
+}
+
+
+/* ==================================================
    Open-Meteo
    ================================================== */
 
@@ -372,6 +730,7 @@ function getHongKongDateString() {
 
 
   const map = {};
+
 
   parts.forEach(part => {
 
@@ -498,11 +857,7 @@ function getWeatherInfo(code) {
    Render 今晚天氣
    ==================================================
 
-   目前設定：
-
    「今晚天氣」代表今晚 20:00 預測。
-
-   不再使用目前時間的即時天氣。
 
    ================================================== */
 
@@ -532,10 +887,6 @@ function renderWeather(data) {
   const weatherCodes =
     hourly.weather_code || [];
 
-
-  /*
-     找今晚 20:00。
-  */
 
   const tonightIndex =
     findTonightWeatherIndex(
@@ -641,11 +992,6 @@ function findTonightWeatherIndex(times) {
         );
 
 
-      /*
-         只搜尋今日
-         18:00 - 23:00。
-      */
-
       if (
         date !== today ||
         hour < 18 ||
@@ -655,10 +1001,6 @@ function findTonightWeatherIndex(times) {
         return;
       }
 
-
-      /*
-         以 20:00 為目標。
-      */
 
       const difference =
         Math.abs(
@@ -705,7 +1047,8 @@ function findNearestHourIndex(times) {
     new Date();
 
 
-  let bestIndex = 0;
+  let bestIndex =
+    0;
 
   let bestDifference =
     Infinity;
@@ -786,14 +1129,6 @@ function parseLocalDateTime(value) {
   ] = match;
 
 
-  /*
-     Open-Meteo 已指定
-     timezone=Asia/Hong_Kong。
-
-     這裡建立一個接近本地時間的 Date，
-     主要用於今晚資料判斷。
-  */
-
   return new Date(
     Number(year),
     Number(month) - 1,
@@ -871,11 +1206,6 @@ function renderMoonData(data) {
     let moonset =
       moonsets[0];
 
-
-    /*
-       如果月落時間在月出之前，
-       嘗試使用翌日月落。
-    */
 
     if (
       moonrises[0] &&
@@ -968,7 +1298,8 @@ function getMoonPhaseInfo(phase) {
 
   const illumination =
     (
-      (1 -
+      (
+        1 -
         Math.cos(
           2 *
           Math.PI *
@@ -1015,23 +1346,6 @@ function formatMoonTime(value) {
 
 /* ==================================================
    真實月亮位置
-   ==================================================
-
-   以下為低精度天文計算。
-
-   用香港：
-
-   latitude  = 22.3193
-   longitude = 114.1694
-
-   計算：
-
-   Moon RA
-   Moon Dec
-   Local Sidereal Time
-   Azimuth
-   Altitude
-
    ================================================== */
 
 function calculateMoonPosition(
@@ -1048,10 +1362,6 @@ function calculateMoonPosition(
     jd - 2451543.5;
 
 
-  /*
-     Moon orbital elements
-  */
-
   const N =
     normalizeAngle(
       125.1228 -
@@ -1060,7 +1370,7 @@ function calculateMoonPosition(
 
 
   const i =
-      5.1454;
+    5.1454;
 
 
   const w =
@@ -1071,11 +1381,11 @@ function calculateMoonPosition(
 
 
   const a =
-      60.2666;
+    60.2666;
 
 
   const e =
-      0.054900;
+    0.054900;
 
 
   const M =
@@ -1203,10 +1513,6 @@ function calculateMoonPosition(
     );
 
 
-  /*
-     Ecliptic → Equatorial
-  */
-
   const obliquity =
     23.4393 -
     3.563E-7 * d;
@@ -1266,10 +1572,6 @@ function calculateMoonPosition(
     normalizeAngle(ra) / 15;
 
 
-  /*
-     Local Sidereal Time
-  */
-
   const gmst =
     normalizeAngle(
       280.46061837 +
@@ -1296,10 +1598,6 @@ function calculateMoonPosition(
       hourAngle
     );
 
-
-  /*
-     Equatorial → Horizontal
-  */
 
   const H =
     degToRad(
@@ -1343,24 +1641,11 @@ function calculateMoonPosition(
     );
 
 
-  /*
-     Azimuth:
-     0 = North
-     90 = East
-     180 = South
-     270 = West
-  */
-
   azimuth =
     normalizeAngle(
       azimuth + 180
     );
 
-
-  /*
-     簡單大氣折射修正。
-     只在地平線附近使用。
-  */
 
   if (
     altitude > -1 &&
@@ -1601,10 +1886,6 @@ function updateMoonPosition() {
   }
 
 
-  /*
-     更新指南針箭頭。
-  */
-
   if (moonNeedle) {
 
     moonNeedle.style.transform =
@@ -1634,9 +1915,6 @@ function updateMoonPosition() {
    能見度     15%
    月亮高度   10%
 
-   注意：
-   這是 Moon Watch HK 自己的資訊指標，
-   並不是官方氣象機構評級。
    ================================================== */
 
 function calculateTonightScore(
@@ -1712,11 +1990,17 @@ function calculateTonightScore(
           index,
           hour,
           cloud:
-            Number(clouds[index]),
+            Number(
+              clouds[index]
+            ),
           rain:
-            Number(rain[index]),
+            Number(
+              rain[index]
+            ),
           visibility:
-            Number(visibility[index])
+            Number(
+              visibility[index]
+            )
         });
       }
 
@@ -1731,10 +2015,6 @@ function calculateTonightScore(
     return;
   }
 
-
-  /*
-     每一小時評分
-  */
 
   const scored =
     tonight.map(
@@ -1758,11 +2038,6 @@ function calculateTonightScore(
           );
 
 
-        /*
-           Open-Meteo visibility 單位為米。
-           10km 或以上視為滿分。
-        */
-
         const visibilityScore =
           clamp(
             (
@@ -1781,12 +2056,6 @@ function calculateTonightScore(
             DEFAULT_LOCATION.lon
           );
 
-
-        /*
-           月亮高度：
-           0° 以下 = 0
-           60° 或以上 = 100
-        */
 
         const moonAltitudeScore =
           clamp(
@@ -1817,10 +2086,6 @@ function calculateTonightScore(
     );
 
 
-  /*
-     今晚平均分數
-  */
-
   const average =
     Math.round(
       scored.reduce(
@@ -1828,16 +2093,13 @@ function calculateTonightScore(
           total,
           item
         ) =>
-          total + item.score,
+          total +
+          item.score,
         0
       ) /
       scored.length
     );
 
-
-  /*
-     找最佳時間
-  */
 
   const best =
     scored.reduce(
@@ -1983,6 +2245,8 @@ function clamp(
 
 loadWeather();
 
+loadVictoriaParkCrowd();
+
 updateMoonPosition();
 
 
@@ -1993,4 +2257,18 @@ updateMoonPosition();
 setInterval(
   updateMoonPosition,
   30000
+);
+
+
+/*
+   每 5 分鐘重新查詢一次
+   維多利亞公園人流。
+
+   不需要每 30 秒查詢，
+   避免對 Worker 造成不必要請求。
+*/
+
+setInterval(
+  loadVictoriaParkCrowd,
+  5 * 60 * 1000
 );
