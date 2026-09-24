@@ -495,7 +495,15 @@ function getWeatherInfo(code) {
 
 
 /* ==================================================
-   Render weather
+   Render 今晚天氣
+   ==================================================
+
+   目前設定：
+
+   「今晚天氣」代表今晚 20:00 預測。
+
+   不再使用目前時間的即時天氣。
+
    ================================================== */
 
 function renderWeather(data) {
@@ -525,14 +533,18 @@ function renderWeather(data) {
     hourly.weather_code || [];
 
 
-  const nowIndex =
-    findNearestHourIndex(
+  /*
+     找今晚 20:00。
+  */
+
+  const tonightIndex =
+    findTonightWeatherIndex(
       times
     );
 
 
   if (
-    nowIndex < 0
+    tonightIndex < 0
   ) {
 
     return;
@@ -540,13 +552,13 @@ function renderWeather(data) {
 
 
   const temp =
-    temperatures[nowIndex];
+    temperatures[tonightIndex];
 
   const cloud =
-    clouds[nowIndex];
+    clouds[tonightIndex];
 
   const code =
-    weatherCodes[nowIndex];
+    weatherCodes[tonightIndex];
 
 
   const info =
@@ -577,6 +589,100 @@ function renderWeather(data) {
     weatherTemp.textContent =
       `${tempText}${cloudText}`;
   }
+}
+
+
+/* ==================================================
+   找今晚 20:00
+   ================================================== */
+
+function findTonightWeatherIndex(times) {
+
+  if (
+    !Array.isArray(times) ||
+    times.length === 0
+  ) {
+
+    return -1;
+  }
+
+
+  const today =
+    getHongKongDateString();
+
+
+  let bestIndex =
+    -1;
+
+  let bestDifference =
+    Infinity;
+
+
+  times.forEach(
+    (time, index) => {
+
+      const match =
+        time.match(
+          /^(\d{4}-\d{2}-\d{2})T(\d{2}):/
+        );
+
+
+      if (!match) {
+        return;
+      }
+
+
+      const date =
+        match[1];
+
+      const hour =
+        Number(
+          match[2]
+        );
+
+
+      /*
+         只搜尋今日
+         18:00 - 23:00。
+      */
+
+      if (
+        date !== today ||
+        hour < 18 ||
+        hour > 23
+      ) {
+
+        return;
+      }
+
+
+      /*
+         以 20:00 為目標。
+      */
+
+      const difference =
+        Math.abs(
+          hour - 20
+        );
+
+
+      if (
+        difference <
+        bestDifference
+      ) {
+
+        bestDifference =
+          difference;
+
+        bestIndex =
+          index;
+      }
+
+    }
+  );
+
+
+  return bestIndex;
 }
 
 
