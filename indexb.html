@@ -83,6 +83,10 @@
         🏠 首頁
       </a>
 
+      <a href="#crowdSection">
+        📍 維多利亞公園人流
+      </a>
+
       <a href="#scoreSection">
         🌕 今晚賞月指數
       </a>
@@ -132,7 +136,6 @@
 
     <div class="hero-copy">
 
-
       <h1>
         月亮值得你<br>
         出門看看。
@@ -145,6 +148,60 @@
       <p class="location">
         📍 香港
       </p>
+
+    </div>
+
+  </section>
+
+
+  <!-- ==================================================
+       維多利亞公園人流
+       ================================================== -->
+
+  <section
+    class="details"
+    id="crowdSection"
+  >
+
+    <div class="section-heading">
+
+      <span>
+        📍 維多利亞公園
+      </span>
+
+    </div>
+
+
+    <div
+      class="direction"
+      style="justify-content: space-between;"
+    >
+
+      <div>
+
+        <div
+          class="direction-big"
+          id="crowdStatus"
+        >
+          載入中…
+        </div>
+
+        <div
+          class="muted"
+          id="crowdUpdated"
+        >
+          正在查詢現場人流…
+        </div>
+
+      </div>
+
+
+      <div
+        class="direction-big"
+        id="crowdPercentage"
+      >
+        --%
+      </div>
 
     </div>
 
@@ -314,8 +371,8 @@
   >
 
     <div class="section-heading">
-  <span>🔭 月亮現在在哪裡？</span>
-</div>
+      <span>🔭 月亮現在在哪裡？</span>
+    </div>
 
 
     <div class="direction">
@@ -425,6 +482,12 @@
   class="toast"
   role="status"
 ></div>
+
+
+<!-- CounterAPI -->
+<script
+  src="https://cdn.jsdelivr.net/npm/counterapi/dist/counter.browser.min.js"
+></script>
 
 
 <!-- 主程式 -->
