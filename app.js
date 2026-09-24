@@ -38,6 +38,7 @@ const DEFAULT_LOCATION = {
 
 const COUNTER_WORKSPACE = "moon-watch-hk";
 const COUNTER_NAME = "moon-watch-hk";
+const COUNTER_API_KEY = "ut_BOL8Qvqe55faGPve7aLSNjpfDRGXdUTEp245Vx8L";
 
 
 /* ==================================================
