@@ -364,6 +364,65 @@ async function trackPageView() {
 
 trackPageView();
 
+testCounterAPI();
+
+
+/* ==================================================
+   CounterAPI 直接 API 測試
+   ================================================== */
+
+async function testCounterAPI() {
+
+  try {
+
+    const url =
+      "https://api.counterapi.dev/v2/" +
+      COUNTER_WORKSPACE +
+      "/" +
+      COUNTER_NAME +
+      "/up";
+
+
+    console.log(
+      "🌕 CounterAPI 直接 API 測試開始"
+    );
+
+
+    const response =
+      await fetch(
+        url,
+        {
+          method: "GET"
+        }
+      );
+
+
+    console.log(
+      "CounterAPI HTTP Status:",
+      response.status
+    );
+
+
+    const text =
+      await response.text();
+
+
+    console.log(
+      "CounterAPI Response:",
+      text
+    );
+
+
+  } catch (error) {
+
+    console.error(
+      "❌ CounterAPI 直接 API 測試失敗:",
+      error
+    );
+
+  }
+}
+
 
 /* ==================================================
    維多利亞公園人流
