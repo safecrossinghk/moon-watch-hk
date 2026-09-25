@@ -277,6 +277,43 @@ if (siteMenu) {
 
 async function trackPageView() {
 
+  /*
+   * ==================================================
+   * Admin 頁面不計 Counter
+   * ==================================================
+   *
+   * index.html
+   * → 正常計算瀏覽次數
+   *
+   * admin.html
+   * → 不計算瀏覽次數
+   *
+   * 兩個頁面仍然使用完全相同的 app.js。
+   * ==================================================
+   */
+
+  const isAdminPage =
+    window.location.pathname
+      .toLowerCase()
+      .endsWith("/admin.html");
+
+
+  if (isAdminPage) {
+
+    console.log(
+      "👤 Moon Watch HK Admin 頁面：不計 Counter"
+    );
+
+    return;
+  }
+
+
+  /*
+   * ==================================================
+   * 正常訪客 → Counter +1
+   * ==================================================
+   */
+
   try {
 
     console.log(
@@ -314,6 +351,7 @@ async function trackPageView() {
       throw new Error(
         `Counter Worker HTTP ${response.status}`
       );
+
     }
 
 
@@ -337,12 +375,6 @@ async function trackPageView() {
   }
 }
 
-
-/*
-   不會把 counter 數字寫到 HTML。
-
-   使用者完全看不到瀏覽人次。
-*/
 
 trackPageView();
 
