@@ -13,8 +13,18 @@
    7. 原本賞月指數圓環
    8. 原本月亮位置卡片
    9. 右上角選單
-   10. CounterAPI 隱藏式瀏覽次數
+   10. 隱藏式瀏覽次數
    11. 維多利亞公園即時人流
+
+   CounterAPI 架構：
+
+   Moon Watch HK
+        ↓
+   Cloudflare Worker
+        ↓
+   CounterAPI
+
+   API Key 不再放在 app.js。
 
    ================================================== */
 
@@ -41,13 +51,24 @@ const VICTORIA_PARK_WORKER =
 
 
 /* ==================================================
-   CounterAPI 設定
+   Moon Watch HK Counter Worker
+   ==================================================
+
+   注意：
+
+   這裡只放 Cloudflare Worker URL。
+
+   不再放：
+   - CounterAPI API Key
+   - CounterAPI accessToken
+   - CounterAPI library
+
+   API Key 現在只存在 Cloudflare Worker Secret。
+
    ================================================== */
 
-
-const COUNTER_WORKSPACE = "moon-watch-hk";
-const COUNTER_NAME = "moon-watch-hk";
-const COUNTER_API_KEY = "ut_BOL8Qvqe55faGPve7aLSNjpfDRGXdUTEp245Vx8L";
+const COUNTER_WORKER_URL =
+  "https://moon-watch-counter.ctakwah.workers.dev/";
 
 
 /* ==================================================
@@ -229,7 +250,29 @@ if (siteMenu) {
 
 
 /* ==================================================
-   CounterAPI 診斷版
+   Moon Watch HK Counter
+   ==================================================
+
+   現在不再直接呼叫 CounterAPI。
+
+   原本：
+
+   Browser
+      ↓
+   CounterAPI
+      ↓
+   CORS 問題
+
+   現在：
+
+   Browser
+      ↓
+   Cloudflare Worker
+      ↓
+   CounterAPI
+
+   API Key 只保存在 Worker。
+
    ================================================== */
 
 async function trackPageView() {
@@ -242,37 +285,44 @@ async function trackPageView() {
 
 
     if (
-      typeof Counter === "undefined"
+      !COUNTER_WORKER_URL ||
+      COUNTER_WORKER_URL.includes(
+        "你的-worker網址"
+      )
     ) {
 
-      console.error(
-        "❌ CounterAPI library 沒有載入"
+      console.warn(
+        "⚠️ 尚未設定 Counter Worker URL"
       );
 
       return;
     }
 
 
-    const counter =
-      new Counter({
-
-        workspace:
-          COUNTER_WORKSPACE,
-
-        accessToken:
-          COUNTER_API_KEY
-
-      });
-
-
-    const result =
-      await counter.up(
-        COUNTER_NAME
+    const response =
+      await fetch(
+        COUNTER_WORKER_URL,
+        {
+          method: "GET",
+          cache: "no-store"
+        }
       );
 
 
+    if (!response.ok) {
+
+      throw new Error(
+        `Counter Worker HTTP ${response.status}`
+      );
+    }
+
+
+    const result =
+      await response.json();
+
+
     console.log(
-      "✅ CounterAPI 計數成功",
+      "✅ Moon Watch HK Counter：計數成功",
       result
     );
 
@@ -280,77 +330,8 @@ async function trackPageView() {
   } catch (error) {
 
     console.error(
-      "❌ CounterAPI 計數失敗"
-    );
-
-
-    console.error(
-      "錯誤內容：",
+      "❌ Moon Watch HK Counter 計數失敗",
       error
-    );
-
-
-    /*
-       臨時顯示錯誤，
-       方便 iPhone 測試。
-
-       不會顯示 API Key。
-    */
-
-    const message =
-      document.createElement("div");
-
-
-    message.style.position =
-      "fixed";
-
-    message.style.left =
-      "10px";
-
-    message.style.right =
-      "10px";
-
-    message.style.bottom =
-      "10px";
-
-    message.style.zIndex =
-      "99999";
-
-    message.style.padding =
-      "14px";
-
-    message.style.background =
-      "#fff";
-
-    message.style.color =
-      "#111";
-
-    message.style.border =
-      "2px solid #ff6b6b";
-
-    message.style.borderRadius =
-      "12px";
-
-    message.style.fontSize =
-      "14px";
-
-    message.style.lineHeight =
-      "1.5";
-
-    message.style.wordBreak =
-      "break-word";
-
-
-    message.textContent =
-      "CounterAPI 計數失敗：" +
-      (
-        error?.message ||
-        String(error)
-      );
-
-
-    document.body.appendChild(
-      message
     );
 
   }
@@ -359,69 +340,11 @@ async function trackPageView() {
 
 /*
    不會把 counter 數字寫到 HTML。
+
    使用者完全看不到瀏覽人次。
 */
 
 trackPageView();
-
-testCounterAPI();
-
-
-/* ==================================================
-   CounterAPI 直接 API 測試
-   ================================================== */
-
-async function testCounterAPI() {
-
-  try {
-
-    const url =
-      "https://api.counterapi.dev/v2/" +
-      COUNTER_WORKSPACE +
-      "/" +
-      COUNTER_NAME +
-      "/up";
-
-
-    console.log(
-      "🌕 CounterAPI 直接 API 測試開始"
-    );
-
-
-    const response =
-      await fetch(
-        url,
-        {
-          method: "GET"
-        }
-      );
-
-
-    console.log(
-      "CounterAPI HTTP Status:",
-      response.status
-    );
-
-
-    const text =
-      await response.text();
-
-
-    console.log(
-      "CounterAPI Response:",
-      text
-    );
-
-
-  } catch (error) {
-
-    console.error(
-      "❌ CounterAPI 直接 API 測試失敗:",
-      error
-    );
-
-  }
-}
 
 
 /* ==================================================
