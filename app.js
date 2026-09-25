@@ -229,16 +229,17 @@ if (siteMenu) {
 
 
 /* ==================================================
-   CounterAPI
+   CounterAPI 診斷版
    ================================================== */
 
 async function trackPageView() {
 
-  console.log(
-    "🌕 Moon Watch HK Counter：開始計數"
-  );
-
   try {
+
+    console.log(
+      "🌕 Moon Watch HK Counter：開始計數"
+    );
+
 
     if (
       typeof Counter === "undefined"
@@ -271,11 +272,7 @@ async function trackPageView() {
 
 
     console.log(
-      "✅ CounterAPI 計數成功"
-    );
-
-    console.log(
-      "CounterAPI 回應：",
+      "✅ CounterAPI 計數成功",
       result
     );
 
@@ -283,8 +280,77 @@ async function trackPageView() {
   } catch (error) {
 
     console.error(
-      "❌ CounterAPI 計數失敗",
+      "❌ CounterAPI 計數失敗"
+    );
+
+
+    console.error(
+      "錯誤內容：",
       error
+    );
+
+
+    /*
+       臨時顯示錯誤，
+       方便 iPhone 測試。
+
+       不會顯示 API Key。
+    */
+
+    const message =
+      document.createElement("div");
+
+
+    message.style.position =
+      "fixed";
+
+    message.style.left =
+      "10px";
+
+    message.style.right =
+      "10px";
+
+    message.style.bottom =
+      "10px";
+
+    message.style.zIndex =
+      "99999";
+
+    message.style.padding =
+      "14px";
+
+    message.style.background =
+      "#fff";
+
+    message.style.color =
+      "#111";
+
+    message.style.border =
+      "2px solid #ff6b6b";
+
+    message.style.borderRadius =
+      "12px";
+
+    message.style.fontSize =
+      "14px";
+
+    message.style.lineHeight =
+      "1.5";
+
+    message.style.wordBreak =
+      "break-word";
+
+
+    message.textContent =
+      "CounterAPI 計數失敗：" +
+      (
+        error?.message ||
+        String(error)
+      );
+
+
+    document.body.appendChild(
+      message
     );
 
   }
