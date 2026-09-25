@@ -234,14 +234,18 @@ if (siteMenu) {
 
 async function trackPageView() {
 
+  console.log(
+    "🌕 Moon Watch HK Counter：開始計數"
+  );
+
   try {
 
     if (
       typeof Counter === "undefined"
     ) {
 
-      console.warn(
-        "CounterAPI library not loaded."
+      console.error(
+        "❌ CounterAPI library 沒有載入"
       );
 
       return;
@@ -250,27 +254,36 @@ async function trackPageView() {
 
     const counter =
       new Counter({
+
         workspace:
           COUNTER_WORKSPACE,
 
         accessToken:
           COUNTER_API_KEY
+
       });
 
 
-    await counter.up(
-      COUNTER_NAME
-    );
+    const result =
+      await counter.up(
+        COUNTER_NAME
+      );
 
 
     console.log(
-      "Moon Watch HK page view recorded."
+      "✅ CounterAPI 計數成功"
     );
+
+    console.log(
+      "CounterAPI 回應：",
+      result
+    );
+
 
   } catch (error) {
 
-    console.warn(
-      "CounterAPI error:",
+    console.error(
+      "❌ CounterAPI 計數失敗",
       error
     );
 
@@ -279,11 +292,8 @@ async function trackPageView() {
 
 
 /*
-   注意：
-
    不會把 counter 數字寫到 HTML。
-
-   所以使用者完全看不到瀏覽人次。
+   使用者完全看不到瀏覽人次。
 */
 
 trackPageView();
