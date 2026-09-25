@@ -42,7 +42,7 @@ const VICTORIA_PARK_WORKER =
 
 /* ==================================================
    CounterAPI 設定
-   ==================================================
+   ================================================== */
 
 
 const COUNTER_WORKSPACE = "moon-watch-hk";
@@ -530,16 +530,16 @@ function renderVictoriaParkCrowd(
 
 
   /*
-     < 20%
-     偏少
+     < 60%
+     正常
   */
 
   if (
-    percentage < 20
+    percentage < 60
   ) {
 
     status =
-      "🟢 偏少";
+      "🟢 正常";
 
     statusColor =
       "#55d68a";
@@ -547,8 +547,8 @@ function renderVictoriaParkCrowd(
 
 
   /*
-     20% - 79%
-     正常
+     60% - 79%
+     繁忙
   */
 
   else if (
@@ -556,7 +556,7 @@ function renderVictoriaParkCrowd(
   ) {
 
     status =
-      "🟡 正常";
+      "🟡 繁忙";
 
     statusColor =
       "#f2c94c";
