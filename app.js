@@ -389,7 +389,7 @@ trackPageView();
 
    查詢：
 
-   維多利亞公園
+   維園
 
    不顯示：
    - 地圖
@@ -431,7 +431,7 @@ async function loadVictoriaParkCrowd() {
       VICTORIA_PARK_WORKER +
       "?query=" +
       encodeURIComponent(
-        "維多利亞公園"
+        "維園"
       );
 
 
