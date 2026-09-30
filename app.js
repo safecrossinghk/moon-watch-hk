@@ -410,95 +410,135 @@ async function loadVictoriaParkCrowd() {
     !crowdPercentage ||
     !crowdUpdated
   ) {
-
     return;
   }
 
+  const query =
+    "維園";
 
-  try {
+  const maxRetries =
+    3;
 
-    crowdStatus.textContent =
-      "載入中…";
+  const retryDelay =
+    800;
 
-    crowdPercentage.textContent =
-      "--%";
+  crowdStatus.textContent =
+    "載入中…";
 
-    crowdUpdated.textContent =
-      "正在查詢現場人流…";
+  crowdPercentage.textContent =
+    "--%";
 
+  crowdUpdated.textContent =
+    "正在查詢現場人流…";
 
-    const url =
-      VICTORIA_PARK_WORKER +
-      "?query=" +
-      encodeURIComponent(
-        "維園"
+  for (
+    let attempt = 1;
+    attempt <= maxRetries;
+    attempt++
+  ) {
+
+    try {
+
+      console.log(
+        `📍 維多利亞公園人流查詢：第 ${attempt} 次`
       );
 
+      const url =
+        VICTORIA_PARK_WORKER +
+        "?query=" +
+        encodeURIComponent(
+          query
+        );
 
-    const response =
-      await fetch(
-        url,
-        {
-          cache: "no-store"
-        }
-      );
+      const response =
+        await fetch(
+          url,
+          {
+            cache: "no-store"
+          }
+        );
 
+      if (!response.ok) {
 
-    if (!response.ok) {
+        throw new Error(
+          `Crowd Worker HTTP ${response.status}`
+        );
+      }
 
-      throw new Error(
-        `Crowd Worker HTTP ${response.status}`
-      );
-    }
+      const data =
+        await response.json();
 
-
-    const data =
-      await response.json();
-
-
-    const percentage =
-      getCrowdPercentage(
+      console.log(
+        `📍 人流 API 第 ${attempt} 次回傳：`,
         data
       );
 
+      const percentage =
+        getCrowdPercentage(
+          data
+        );
 
-    if (
-      !Number.isFinite(
-        percentage
-      )
-    ) {
+      if (
+        Number.isFinite(
+          percentage
+        )
+      ) {
+
+        console.log(
+          `✅ 維園人流取得成功：${percentage}%`
+        );
+
+        renderVictoriaParkCrowd(
+          percentage
+        );
+
+        return;
+      }
 
       throw new Error(
         "找不到人流百分比"
       );
+
+    } catch (error) {
+
+      console.warn(
+        `⚠️ 維園人流第 ${attempt} 次失敗：`,
+        error
+      );
+
+      if (
+        attempt <
+        maxRetries
+      ) {
+
+        crowdUpdated.textContent =
+          `正在重新查詢…（${attempt + 1}/${maxRetries}）`;
+
+        await new Promise(
+          resolve =>
+            setTimeout(
+              resolve,
+              retryDelay
+            )
+        );
+
+      }
+
     }
-
-
-    renderVictoriaParkCrowd(
-      percentage
-    );
-
-
-  } catch (error) {
-
-    console.error(
-      "Victoria Park crowd error:",
-      error
-    );
-
-
-    crowdStatus.textContent =
-      "暫時無法取得";
-
-
-    crowdPercentage.textContent =
-      "--%";
-
-
-    crowdUpdated.textContent =
-      "請稍後重新整理";
-
   }
+
+  console.error(
+    "❌ 維園人流 3 次查詢均失敗"
+  );
+
+  crowdStatus.textContent =
+    "暫時無法取得";
+
+  crowdPercentage.textContent =
+    "--%";
+
+  crowdUpdated.textContent =
+    "請稍後重新整理";
 }
 
 
